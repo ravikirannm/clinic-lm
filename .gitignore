@@ -1,0 +1,6 @@
+.env
+test-data
+node_modules
+notebook_rag_db
+medcpt_db
+__pycache__
