@@ -1,4 +1,5 @@
 import ReactMarkdown from 'react-markdown'
+import ConfidenceBar from './ConfidenceBar.tsx'
 import type { DrugInteractionResult, DrugInteraction, PICOResult } from '../types.ts'
 
 interface Props {
@@ -7,7 +8,7 @@ interface Props {
 }
 
 export default function DrugInteractionModal({ result, onClose }: Props) {
-  const { query_response, interaction_results } = result
+  const { query_response, interaction_results, confidence } = result
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -22,6 +23,7 @@ export default function DrugInteractionModal({ result, onClose }: Props) {
         </div>
 
         <div style={{ overflowY: 'auto', padding: '0 40px 20px', flex: 1 }}>
+          {confidence != null && <ConfidenceBar confidence={confidence} />}
 
           {query_response && (
             <Section title="Clinical Summary">

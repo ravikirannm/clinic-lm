@@ -62,6 +62,7 @@ export interface ClinicalAnalysis {
     recommended_tests: RecommendedTest[]
   }
   query_response: string
+  confidence: number
 }
 
 export interface AddSourceData {
@@ -146,6 +147,7 @@ export interface DrugInteractionResult {
   interaction_results: DrugInteraction[]
   all_sources: InteractionSource[]
   query_response: string
+  confidence: number
 }
 
 // ── Literature Review ─────────────────────────────────────────────────────────
@@ -274,6 +276,7 @@ export interface ContradictionResult {
   intra_document: ContradictionItem[]
   severity_counts: { high: number; medium: number; low: number }
   overall_assessment: string
+  confidence: number
 }
 
 // ── Document Drafter ─────────────────────────────────────────────────────────
@@ -292,6 +295,7 @@ export type DraftResult = Record<string, DraftItem>
 export interface GuidelinesConformanceResult {
   keywords: string[]
   guidelines_fetched: number
+  confidence: number
   sources?: { pubmed: number; bookshelf: number; medlineplus: number; nlm_catalog: number }
   findings: GuidelineFinding[]
   deviations: GuidelineFinding[]

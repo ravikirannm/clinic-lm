@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import ConfidenceBar from './ConfidenceBar.tsx'
 import type { GuidelinesConformanceResult, GuidelineFinding } from '../types.ts'
 
 interface Props {
@@ -11,7 +12,7 @@ type Tab = 'deviations' | 'conforming' | 'not_assessed'
 export default function GuidelinesConformanceModal({ result, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('deviations')
 
-  const { deviations, conforming, not_assessed, overall_summary, guidelines_fetched } = result
+  const { deviations, conforming, not_assessed, overall_summary, guidelines_fetched, confidence } = result
 
   const majorCount = deviations.filter(d => d.severity === 'major').length
   const minorCount = deviations.filter(d => d.severity === 'minor').length
@@ -34,6 +35,7 @@ export default function GuidelinesConformanceModal({ result, onClose }: Props) {
         </div>
 
         <div style={{ overflowY: 'auto', padding: '0 24px 24px', flex: 1 }}>
+          {confidence != null && <ConfidenceBar confidence={confidence} />}
 
           {/* Summary bar */}
           <div style={summaryBar}>

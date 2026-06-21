@@ -1,5 +1,17 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List
+
+_CONF_FIELD = Field(
+    default=0.8,
+    description=(
+        "Your confidence in this output (0.0–1.0). "
+        "1.0=high certainty, unambiguous data, multiple concordant sources. "
+        "0.7=good confidence, minor gaps. "
+        "0.5=moderate, limited info or some ambiguity. "
+        "0.3=low, significant missing data. "
+        "0.0=very low, insufficient basis for reliable output."
+    ),
+)
 
 # ── Shared ────────────────────────────────────────────────────────────────────
 
@@ -14,6 +26,7 @@ class PubMedSearchQuery(BaseModel):
 class PubMedSearchRequest(BaseModel):
     """LLM output wrapper: instructs the model to produce a PubMed search config."""
     pubmed: PubMedSearchQuery
+    confidence: float = _CONF_FIELD
 
 class DifferentialDiagnosis(BaseModel):
     name: str
@@ -39,6 +52,7 @@ class ClinicalAssessment(BaseModel):
     possible_conditions: list[DifferentialDiagnosis]
     red_flags: list[ClinicalRedFlag]
     recommended_tests: list[DiagnosticTest]
+    confidence: float = _CONF_FIELD
 
 
 # ── Drug Interaction ──────────────────────────────────────────────────────────
@@ -46,6 +60,7 @@ class ClinicalAssessment(BaseModel):
 class DrugNameList(BaseModel):
     """Step A LLM output: raw drug name strings extracted from text."""
     items: list[str] = []
+    confidence: float = _CONF_FIELD
 
 
 class DrugMention(BaseModel):
@@ -59,6 +74,7 @@ class DrugMention(BaseModel):
 
 class DrugExtractionResult(BaseModel):
     drugs_mentioned: list[DrugMention] = []
+    confidence: float = _CONF_FIELD
 
 
 class PICOEvidence(BaseModel):
@@ -120,6 +136,7 @@ class GuidelineDeviation(BaseModel):
 class ConformanceAnalysis(BaseModel):
     findings: list[GuidelineDeviation]
     overall_summary: str
+    confidence: float = _CONF_FIELD
 
 
 # Contradiction Detector ───────────────────────────────────────────────
@@ -139,6 +156,7 @@ class ContradictionItem(BaseModel):
 class ContradictionReport(BaseModel):
     contradictions: list[ContradictionItem]
     overall_assessment: str
+    confidence: float = _CONF_FIELD
 
 
 # Chat ──────────────────────────────────────────────────────────────────

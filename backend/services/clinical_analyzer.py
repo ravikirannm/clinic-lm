@@ -98,6 +98,7 @@ class ClinicalAnalyzer:
         medical_corpus_input = PubMedSearchRequest.model_validate_json(
             response["message"]["content"]
         )
+        step_query_conf = max(0.0, min(1.0, medical_corpus_input.confidence))
         api_inputs = medical_corpus_input.model_dump()
         logger.info("Generated search queries: %s", api_inputs)
 
@@ -180,15 +181,18 @@ clinical assessment in this exact structure:
             format=ClinicalAssessment.model_json_schema(),
             options={"temperature": 0},
         )
-        symptom_analysis = ClinicalAssessment.model_validate_json(
-            response["message"]["content"]
-        ).model_dump()
+        assessment_obj = ClinicalAssessment.model_validate_json(response["message"]["content"])
+        step_assessment_conf = max(0.0, min(1.0, assessment_obj.confidence))
+        symptom_analysis = assessment_obj.model_dump()
+
+        total_confidence = round(step_query_conf * step_assessment_conf, 3)
 
         response_data = {
             "keywords": keywords,
             "generated_queries": api_inputs,
             "pubmed_results": pubmed_results,
             "symptom_analysis": symptom_analysis,
+            "confidence": total_confidence,
         }
 
         # ── Step 6: human-readable summary ───────────────────────────────────

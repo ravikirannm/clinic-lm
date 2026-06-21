@@ -59,9 +59,9 @@ class InteractionChecker:
             format=DrugNameList.model_json_schema(),
             options={"temperature": 0.1}
         )
-        drug_names = DrugNameList.model_validate_json(
-            pass1_response["message"]["content"]
-        ).items
+        drug_list_obj = DrugNameList.model_validate_json(pass1_response["message"]["content"])
+        step_a_conf = max(0.0, min(1.0, drug_list_obj.confidence))
+        drug_names = drug_list_obj.items
 
         # ── Step B: Web search per drug name (no LLM, raw context only) ──────
         brand_molecule_map: dict[str, str] = {}
@@ -117,9 +117,9 @@ class InteractionChecker:
             format=DrugExtractionResult.model_json_schema(),
             options={"temperature": 0.2}
         )
-        drug_extraction_result = DrugExtractionResult.model_validate_json(
-            response["message"]["content"]
-        ).model_dump()
+        drug_extraction_obj = DrugExtractionResult.model_validate_json(response["message"]["content"])
+        step_c_conf = max(0.0, min(1.0, drug_extraction_obj.confidence))
+        drug_extraction_result = drug_extraction_obj.model_dump()
         logger.info("Drug extraction result: %s", drug_extraction_result)
 
         # ── RxNorm verification ───────────────────────────────────────────────
@@ -345,7 +345,9 @@ class InteractionChecker:
             pair["pico"] = pico_dict
 
         # ── Assemble result ───────────────────────────────────────────────────
+        total_confidence = round(step_a_conf * step_c_conf, 3)
         response_data: dict = {
+            "confidence": total_confidence,
             "drugs_extracted": drug_extraction_result,
             "brand_molecule_map": brand_molecule_map,
             "pseudoscience_flags": pseudoscience_flags,

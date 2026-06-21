@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import ConfidenceBar from './ConfidenceBar.tsx'
 import type { ContradictionResult, ContradictionItem } from '../types.ts'
 
 interface Props {
@@ -13,7 +14,7 @@ export default function ContradictionDetectorModal({ result, onClose }: Props) {
 
   const { contradictions, source_vs_source, source_vs_literature,
           intra_document = [], severity_counts,
-          overall_assessment, sources_analysed } = result
+          overall_assessment, sources_analysed, confidence } = result
 
   const active =
     tab === 'all'                  ? contradictions :
@@ -34,6 +35,7 @@ export default function ContradictionDetectorModal({ result, onClose }: Props) {
         </div>
 
         <div style={{ overflowY: 'auto', padding: '0 24px 24px', flex: 1 }}>
+          {confidence != null && <ConfidenceBar confidence={confidence} />}
 
           {/* Stat bar */}
           <div style={statBar}>

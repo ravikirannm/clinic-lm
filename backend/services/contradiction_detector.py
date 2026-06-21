@@ -233,11 +233,12 @@ class ContradictionDetector:
                 format=PubMedSearchRequest.model_json_schema(),
                 options={"temperature": 0.2},
             )
-            api_inputs = PubMedSearchRequest.model_validate_json(
-                resp["message"]["content"]
-            ).model_dump()
+            query_obj = PubMedSearchRequest.model_validate_json(resp["message"]["content"])
+            step_query_conf = max(0.0, min(1.0, query_obj.confidence))
+            api_inputs = query_obj.model_dump()
         except Exception as e:
             logger.warning("PubMed query generation failed: %s", e)
+            step_query_conf = 0.5
             api_inputs = {"pubmed": {"primary_query": " ".join(keywords[:4])}}
 
         # ── Step 4: PubMed fetch ──────────────────────────────────────────────
@@ -329,8 +330,10 @@ Use EXACT document names. Return ONLY valid JSON.
                 options={"temperature": 0.15},
             )
             report = ContradictionReport.model_validate_json(resp["message"]["content"])
+            step_report_conf = max(0.0, min(1.0, report.confidence))
         except Exception as e:
             logger.error("Contradiction analysis LLM call failed: %s", e)
+            step_report_conf = 0.0
             report = ContradictionReport(
                 contradictions=[],
                 overall_assessment="Analysis failed — LLM error.",
@@ -403,11 +406,12 @@ Use EXACT document names. Return ONLY valid JSON.
         med   = [c for c in contradictions if c["severity"] == "medium"]
         low   = [c for c in contradictions if c["severity"] == "low"]
 
+        total_confidence = round(step_query_conf * step_report_conf, 3)
         logger.info(
             "Contradictions (after validation): %d total (%d high, %d med, %d low) — "
-            "%d source-vs-source, %d source-vs-literature, %d intra-document",
+            "%d source-vs-source, %d source-vs-literature, %d intra-document | conf=%.3f",
             len(contradictions), len(high), len(med), len(low),
-            len(svs), len(svl), len(intra),
+            len(svs), len(svl), len(intra), total_confidence,
         )
 
         return {
@@ -420,4 +424,5 @@ Use EXACT document names. Return ONLY valid JSON.
             "intra_document": intra,
             "severity_counts": {"high": len(high), "medium": len(med), "low": len(low)},
             "overall_assessment": report.overall_assessment,
+            "confidence": total_confidence,
         }

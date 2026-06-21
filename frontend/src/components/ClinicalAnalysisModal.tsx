@@ -1,4 +1,5 @@
 import ReactMarkdown from 'react-markdown'
+import ConfidenceBar from './ConfidenceBar.tsx'
 import type { ClinicalAnalysis, PossibleCondition, RedFlag, RecommendedTest } from '../types.ts'
 
 interface Props {
@@ -7,7 +8,7 @@ interface Props {
 }
 
 export default function ClinicalAnalysisModal({ analysis, onClose }: Props) {
-  const { query_response, symptom_analysis } = analysis
+  const { query_response, symptom_analysis, confidence } = analysis
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -22,6 +23,7 @@ export default function ClinicalAnalysisModal({ analysis, onClose }: Props) {
         </div>
 
         <div style={{ overflowY: 'auto', padding: '0 40px 20px', flex: 1 }}>
+          {confidence != null && <ConfidenceBar confidence={confidence} />}
 
           {query_response && (
             <Section title="Clinical Summary">

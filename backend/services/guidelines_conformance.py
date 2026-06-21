@@ -124,11 +124,12 @@ or evidence-based recommendations.
                 format=PubMedSearchRequest.model_json_schema(),
                 options={"temperature": 0.2},
             )
-            api_inputs = PubMedSearchRequest.model_validate_json(
-                resp["message"]["content"]
-            ).model_dump()
+            query_obj = PubMedSearchRequest.model_validate_json(resp["message"]["content"])
+            step_query_conf = max(0.0, min(1.0, query_obj.confidence))
+            api_inputs = query_obj.model_dump()
         except Exception as e:
             logger.error("Guideline query generation failed: %s", e)
+            step_query_conf = 0.5
             api_inputs = {"pubmed": {"primary_query": " ".join(keywords[:4]) + " guideline"}}
 
         logger.info("Guidelines search queries: %s", api_inputs)
@@ -196,8 +197,10 @@ Identify conforming practices and deviations. Return findings as structured JSON
                 options={"temperature": 0.1},
             )
             analysis = ConformanceAnalysis.model_validate_json(resp["message"]["content"])
+            step_analysis_conf = max(0.0, min(1.0, analysis.confidence))
         except Exception as e:
             logger.error("Conformance analysis failed: %s", e)
+            step_analysis_conf = 0.0
             analysis = ConformanceAnalysis(findings=[], overall_summary="Analysis failed.")
 
         # Attach PMID/title from matched PubMed records where possible
@@ -210,15 +213,18 @@ Identify conforming practices and deviations. Return findings as structured JSON
         conforming = [f for f in analysis.findings if f.status == "conforming"]
         not_assessed = [f for f in analysis.findings if f.status == "not_assessed"]
 
+        total_confidence = round(step_query_conf * step_analysis_conf, 3)
         logger.info(
-            "Conformance: %d findings — %d deviations, %d conforming, %d not assessed",
+            "Conformance: %d findings — %d deviations, %d conforming, %d not assessed | conf=%.3f",
             len(analysis.findings), len(deviations), len(conforming), len(not_assessed),
+            total_confidence,
         )
 
         return {
             "keywords": keywords,
             "search_queries": api_inputs,
             "guidelines_fetched": len(all_guidelines),
+            "confidence": total_confidence,
             "sources": {
                 "pubmed":     len(pubmed_results),
                 "bookshelf":  len(books_results),
