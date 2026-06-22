@@ -255,7 +255,7 @@ export interface GuidelineFinding {
 
 export interface ContradictionItem {
   topic: string
-  type: 'source_vs_source' | 'source_vs_literature' | 'intra_document'
+  type: 'source_vs_source' | 'intra_document'  // injected by backend, not from LLM
   claim_a: string
   source_a: string
   claim_b: string
@@ -263,16 +263,13 @@ export interface ContradictionItem {
   severity: 'high' | 'medium' | 'low'
   explanation: string
   resolution: string
-  pmid: string | null
 }
 
 export interface ContradictionResult {
   keywords: string[]
   sources_analysed: string[]
-  pubmed_fetched: number
-  contradictions: ContradictionItem[]
+  contradictions: ContradictionItem[]      // intra_document + source_vs_source merged
   source_vs_source: ContradictionItem[]
-  source_vs_literature: ContradictionItem[]
   intra_document: ContradictionItem[]
   severity_counts: { high: number; medium: number; low: number }
   overall_assessment: string

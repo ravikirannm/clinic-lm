@@ -7,20 +7,18 @@ interface Props {
   onClose: () => void
 }
 
-type Tab = 'all' | 'source_vs_source' | 'source_vs_literature' | 'intra_document'
+type Tab = 'all' | 'source_vs_source' | 'intra_document'
 
 export default function ContradictionDetectorModal({ result, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('all')
 
-  const { contradictions, source_vs_source, source_vs_literature,
-          intra_document = [], severity_counts,
-          overall_assessment, sources_analysed, confidence } = result
+  const { contradictions, source_vs_source, intra_document,
+          severity_counts, overall_assessment, sources_analysed, confidence } = result
 
   const active =
-    tab === 'all'                  ? contradictions :
-    tab === 'source_vs_source'     ? source_vs_source :
-    tab === 'intra_document'       ? intra_document :
-    source_vs_literature
+    tab === 'all'              ? contradictions :
+    tab === 'source_vs_source' ? source_vs_source :
+    intra_document
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -45,7 +43,6 @@ export default function ContradictionDetectorModal({ result, onClose }: Props) {
             <StatChip label="Low" value={severity_counts.low} color="#6366f1" />
             <StatChip label="Intra-Doc" value={intra_document.length} color="#f97316" />
             <StatChip label="Src vs Src" value={source_vs_source.length} color="#0ea5e9" />
-            <StatChip label="Src vs Lit" value={source_vs_literature.length} color="#8b5cf6" />
           </div>
 
           {/* Sources analysed */}
@@ -75,8 +72,6 @@ export default function ContradictionDetectorModal({ result, onClose }: Props) {
               label={`Intra-Document (${intra_document.length})`} color="#f97316" />
             <TabBtn active={tab === 'source_vs_source'} onClick={() => setTab('source_vs_source')}
               label={`Src vs Src (${source_vs_source.length})`} color="#0ea5e9" />
-            <TabBtn active={tab === 'source_vs_literature'} onClick={() => setTab('source_vs_literature')}
-              label={`Src vs Lit (${source_vs_literature.length})`} color="#8b5cf6" />
           </div>
 
           {/* Cards */}
@@ -95,6 +90,13 @@ export default function ContradictionDetectorModal({ result, onClose }: Props) {
 
 function ContradictionCard({ item }: { item: ContradictionItem }) {
   const [open, setOpen] = useState(false)
+
+  const labelA = item.type === 'intra_document'
+    ? `${item.source_a} — Statement A`
+    : item.source_a
+  const labelB = item.type === 'intra_document'
+    ? `${item.source_b} — Statement B`
+    : item.source_b
 
   return (
     <div style={cardBorder(item.severity)}>
@@ -115,18 +117,13 @@ function ContradictionCard({ item }: { item: ContradictionItem }) {
         </span>
       </div>
 
-      {/* Preview (always visible) */}
+      {/* Claim preview (always visible) */}
       <div style={claimRow}>
-        <ClaimBox
-          label={item.type === 'intra_document' ? `${item.source_a} — Statement A` : item.source_a}
-          claim={item.claim_a} side="a" />
+        <ClaimBox label={labelA} claim={item.claim_a} side="a" />
         <div style={{ display: 'flex', alignItems: 'center', fontSize: 18, color: '#ef4444', flexShrink: 0 }}>
           ⟷
         </div>
-        <ClaimBox
-          label={item.type === 'intra_document' ? `${item.source_b} — Statement B` : item.source_b}
-          claim={item.claim_b} side="b"
-          pmid={item.type === 'source_vs_literature' ? item.pmid : null} />
+        <ClaimBox label={labelB} claim={item.claim_b} side="b" />
       </div>
 
       {/* Expanded detail */}
@@ -140,21 +137,13 @@ function ContradictionCard({ item }: { item: ContradictionItem }) {
   )
 }
 
-function ClaimBox({ label, claim, side, pmid }: {
-  label: string; claim: string; side: 'a' | 'b'; pmid?: string | null
-}) {
+function ClaimBox({ label, claim, side }: { label: string; claim: string; side: 'a' | 'b' }) {
   const color = side === 'a' ? '#0ea5e9' : '#8b5cf6'
   return (
     <div style={{ flex: 1, minWidth: 0 }}>
       <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
-        letterSpacing: '0.05em', color, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+        letterSpacing: '0.05em', color, marginBottom: 4 }}>
         {label}
-        {pmid && (
-          <a href={`https://pubmed.ncbi.nlm.nih.gov/${pmid}/`} target="_blank" rel="noreferrer"
-            style={{ color: '#8b5cf6', textDecoration: 'none', fontSize: 10 }}>
-            PMID {pmid} ↗
-          </a>
-        )}
       </div>
       <div style={{
         background: color + '0d',
@@ -206,9 +195,8 @@ function SeverityBadge({ severity: rawSeverity }: { severity: string }) {
 
 function TypeBadge({ type }: { type: string }) {
   const map: Record<string, { label: string; color: string }> = {
-    source_vs_source:    { label: 'Source vs Source',    color: '#0ea5e9' },
-    source_vs_literature:{ label: 'Source vs Literature',color: '#8b5cf6' },
-    intra_document:      { label: 'Intra-Document',      color: '#f97316' },
+    source_vs_source: { label: 'Source vs Source', color: '#0ea5e9' },
+    intra_document:   { label: 'Intra-Document',   color: '#f97316' },
   }
   const { label, color } = map[type] ?? { label: type, color: '#94a3b8' }
   return (

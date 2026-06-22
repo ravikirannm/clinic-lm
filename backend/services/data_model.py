@@ -142,20 +142,19 @@ class ConformanceAnalysis(BaseModel):
 # Contradiction Detector ───────────────────────────────────────────────
 
 class ContradictionItem(BaseModel):
-    topic: str         # clinical topic, e.g. "Warfarin dosing"
-    type: str          # "source_vs_source" | "source_vs_literature"
-    claim_a: str       # first claim
-    source_a: str      # origin of claim A (source doc name or "PubMed PMID:xxx")
-    claim_b: str       # contradicting claim
-    source_b: str      # origin of claim B
-    severity: str      # "high" | "medium" | "low"
-    explanation: str   # why these contradict
-    resolution: str    # recommended interpretation or action
-    pmid: str | None = None   # supporting PubMed PMID when type is source_vs_literature
+    topic: str        # brief label, e.g. "Laterality Mismatch"
+    claim_a: str      # first contradicting statement (quote or paraphrase)
+    source_a: str     # exact document name from the uploaded list
+    claim_b: str      # second contradicting statement
+    source_b: str     # exact document name from the uploaded list
+    severity: str     # "high" | "medium" | "low"
+    explanation: str  # why these two statements contradict
+    resolution: str   # action needed to resolve the contradiction
 
 class ContradictionReport(BaseModel):
-    contradictions: list[ContradictionItem]
-    overall_assessment: str
+    intra_document: list[ContradictionItem] = []     # contradictions within ONE document
+    source_vs_source: list[ContradictionItem] = []  # contradictions ACROSS documents
+    overall_assessment: str = ""
     confidence: float = _CONF_FIELD
 
 
