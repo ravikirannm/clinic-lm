@@ -39,7 +39,7 @@ export default function GuidelinesConformanceModal({ result, onClose }: Props) {
 
           {/* Summary bar */}
           <div style={summaryBar}>
-            <StatChip label="Guidelines checked" value={guidelines_fetched} color="var(--text-muted)" />
+            <StatChip label="Sources retrieved" value={guidelines_fetched} color="var(--text-muted)" />
             <StatChip label="Deviations" value={deviations.length} color="#ef4444" />
             <StatChip label="Major" value={majorCount} color="#ef4444" />
             <StatChip label="Minor" value={minorCount} color="#f59e0b" />

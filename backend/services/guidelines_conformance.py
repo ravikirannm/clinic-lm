@@ -41,20 +41,33 @@ _CONFORMANCE_SYSTEM = """\
 You are a clinical guidelines conformance analyst. Your job is to compare a patient's \
 current management against evidence-based clinical practice guidelines and identify deviations.
 
-For each relevant guideline area found in the provided sources:
+For EACH relevant clinical area covered by the provided guideline sources, you MUST \
+create one structured finding entry. The `findings` array must NEVER be empty when \
+guideline sources are provided — every area addressed by the retrieved guidelines \
+requires a separate finding entry.
+
+For each finding:
 1. Identify what the guideline recommends for this patient's condition.
 2. Determine whether the current management conforms, deviates, partially conforms, \
    or cannot be assessed from the available documentation.
 3. For deviations, describe what is different and how severe it is.
 4. Suggest the corrective action.
 
-Severity definitions:
-- major: deviation that could directly affect patient outcomes or safety
-- minor: deviation from best practice but unlikely to cause immediate harm
-- informational: FYI item, no urgent action required
+Status values (use exactly one per finding):
+- "conforming"   — current management matches the guideline recommendation
+- "deviation"    — current management clearly does not follow the guideline
+- "partial"      — current management partially follows the guideline
+- "not_assessed" — insufficient information to evaluate conformance
 
-Return ONLY a JSON object matching the schema. Be thorough — cover medications, \
-dosing targets, monitoring intervals, and procedural recommendations.\
+Severity definitions (required even for conforming/not_assessed findings):
+- "major"         — deviation that could directly affect patient outcomes or safety
+- "minor"         — deviation from best practice but unlikely to cause immediate harm
+- "informational" — FYI item, no urgent action required
+
+CRITICAL: You MUST populate `findings` with at least one entry per clinical area \
+found in the sources. Do NOT summarise findings only in `overall_summary` — \
+every observation must also appear as a structured item in `findings`. \
+Cover medications, dosing targets, monitoring intervals, and procedural recommendations.\
 """
 
 
@@ -183,8 +196,10 @@ or evidence-based recommendations.
 === GENERAL MEDICAL KNOWLEDGE BASE ===
 {json.dumps(retrieved_docs[:3], indent=1)}
 
-Analyse each guideline area and compare against the patient's current management. \
-Identify conforming practices and deviations. Return findings as structured JSON.
+For EVERY clinical area mentioned in the guideline sources above, add one entry to \
+the `findings` array. Do NOT leave `findings` empty — a non-empty `overall_summary` \
+without corresponding `findings` entries is invalid output. Identify both conforming \
+practices and deviations and return all findings as structured JSON.
 """
         try:
             resp = self.client.chat(
@@ -213,7 +228,7 @@ Identify conforming practices and deviations. Return findings as structured JSON
         conforming = [f for f in analysis.findings if f.status == "conforming"]
         not_assessed = [f for f in analysis.findings if f.status == "not_assessed"]
 
-        total_confidence = round(step_query_conf * step_analysis_conf, 3)
+        total_confidence = round((step_query_conf + step_analysis_conf) / 2, 3)
         logger.info(
             "Conformance: %d findings — %d deviations, %d conforming, %d not assessed | conf=%.3f",
             len(analysis.findings), len(deviations), len(conforming), len(not_assessed),
