@@ -9,20 +9,20 @@ _HEADERS = {"Accept": "application/json"}
 
 
 class OrphaDataClient:
-    def search_by_hpo(self, hpo_id: str, page: int = 1) -> dict:
+    def search_by_hpo(self, hpo_id: str) -> dict:
         """
         Find rare diseases associated with an HPO term.
         Returns {"diseases": [...], "total": int} where each disease is
         {"orpha_code": str, "name": str}.
-        """
+        """        
         try:
             resp = requests.get(
-                f"{_BASE}/rd-phenotypes/hpo/{hpo_id}/{page}",
+                f"{_BASE}/rd-phenotypes/hpoids/{hpo_id}",
                 headers=_HEADERS,
                 timeout=10,
             )
             resp.raise_for_status()
-            data = resp.json()
+            data = resp.json()            
             diseases = self._parse_diseases(data)
             total = data.get("total_results") or data.get("total") or len(diseases)
             return {"diseases": diseases, "total": total}
@@ -40,16 +40,19 @@ class OrphaDataClient:
             raw = raw.get("results", [])
 
         diseases = []
-        for item in raw if isinstance(raw, list) else []:
+        for item in (raw if isinstance(raw, list) else []):
+            # Get the nested Disorder dictionary if it exists, otherwise fall back to item
+            disorder = item.get("Disorder") if isinstance(item.get("Disorder"), dict) else item
+            
             orpha = (
-                item.get("ORPHAcode")
-                or item.get("orpha_code")
-                or item.get("OrphaCode")
+                disorder.get("ORPHAcode")
+                or disorder.get("orpha_code")
+                or disorder.get("OrphaCode")
             )
             name = (
-                item.get("Preferred term")
-                or item.get("preferred_term")
-                or item.get("name")
+                disorder.get("Preferred term")
+                or disorder.get("preferred_term")
+                or disorder.get("name")
                 or ""
             )
             if orpha:
