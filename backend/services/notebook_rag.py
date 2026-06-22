@@ -161,3 +161,14 @@ class NotebookRAG:
             logger.info("NotebookRAG: deleted chunks for source %s", source_id)
         except Exception as e:
             logger.warning("NotebookRAG: delete_source failed: %s", e)
+
+    @classmethod
+    def delete_notebook(cls, notebook_id: str):
+        """Drop the entire vector collection for a notebook."""
+        try:
+            cls._ensure_loaded()
+            name = "nb_" + notebook_id.replace("-", "")
+            cls._chroma.delete_collection(name)
+            logger.info("NotebookRAG: dropped collection for notebook %s", notebook_id)
+        except Exception as e:
+            logger.warning("NotebookRAG: delete_notebook failed: %s", e)

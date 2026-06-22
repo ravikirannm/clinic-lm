@@ -129,6 +129,28 @@ def get_notebook(notebook_id: str, request: Request):
     }
 
 
+# ── Delete ────────────────────────────────────────────────────────────────────
+
+@router.delete("/{notebook_id}")
+def delete_notebook(notebook_id: str, request: Request):
+    uid = _user_id(request)
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM notebooks WHERE notebook_id = %s AND user_id = %s",
+                (notebook_id, uid),
+            )
+            if cur.rowcount == 0:
+                return JSONResponse(status_code=404, content={"error": "Not found"})
+        conn.commit()
+
+    get_db().notebook_content.delete_one({"notebook_id": notebook_id})
+    NotebookRAG.delete_notebook(notebook_id)
+
+    return {"ok": True}
+
+
 # ── Add sources ───────────────────────────────────────────────────────────────
 
 @router.post("/{notebook_id}/sources")

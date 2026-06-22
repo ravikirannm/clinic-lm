@@ -7,6 +7,8 @@ export default function NotebooksPage() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<Notebook | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     fetch('/api/notebooks', { credentials: 'include' })
@@ -28,6 +30,23 @@ export default function NotebooksPage() {
     } catch (err) {
       console.error(err)
       setCreating(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirmDelete) return
+    setDeleting(true)
+    try {
+      await fetch(`/api/notebooks/${confirmDelete.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      setNotebooks(prev => prev.filter(nb => nb.id !== confirmDelete.id))
+      setConfirmDelete(null)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -54,18 +73,55 @@ export default function NotebooksPage() {
           </p>
         ) : (
           notebooks.map(nb => (
-            <Link key={nb.id} to={`/notebook/${nb.id}`} className="notebook-list-item">
-              <span className="notebook-list-item-icon">📓</span>
-              <span className="notebook-list-item-title">{nb.title}</span>
-              <div className="notebook-list-item-meta">
-                <span>{nb.sourceCount} sources</span>
-                <span>{nb.updatedAt}</span>
-              </div>
-              <span className="notebook-list-item-arrow">›</span>
-            </Link>
+            <div key={nb.id} className="notebook-list-item" style={{ position: 'relative' }}>
+              <Link to={`/notebook/${nb.id}`} style={{ display: 'contents' }}>
+                <span className="notebook-list-item-icon">📓</span>
+                <span className="notebook-list-item-title">{nb.title}</span>
+                <div className="notebook-list-item-meta">
+                  <span>{nb.sourceCount} sources</span>
+                  <span>{nb.updatedAt}</span>
+                </div>
+                <span className="notebook-list-item-arrow">›</span>
+              </Link>
+              <button
+                className="btn-ghost"
+                onClick={e => { e.preventDefault(); setConfirmDelete(nb) }}
+                style={{ position: 'absolute', right: 36, top: '50%', transform: 'translateY(-50%)', fontSize: 16, padding: '2px 6px', color: 'var(--text-muted)', lineHeight: 1 }}
+                title="Delete notebook"
+              >
+                ×
+              </button>
+            </div>
           ))
         )}
       </div>
+
+      {confirmDelete && (
+        <div className="modal-backdrop" onClick={() => !deleting && setConfirmDelete(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 380 }}>
+            <div className="modal-header">
+              <h3>Delete notebook</h3>
+              <button className="btn-close" onClick={() => setConfirmDelete(null)} disabled={deleting}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ margin: 0, fontSize: 14 }}>
+                Delete <strong>{confirmDelete.title}</strong>? This will permanently remove all sources and generated content.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-ghost" onClick={() => setConfirmDelete(null)} disabled={deleting}>Cancel</button>
+              <button
+                className="btn-primary"
+                onClick={handleDelete}
+                disabled={deleting}
+                style={{ background: 'var(--danger, #e53e3e)' }}
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
