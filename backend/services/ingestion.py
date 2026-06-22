@@ -2,13 +2,25 @@ import io
 from html.parser import HTMLParser
 
 import httpx
-import pdfplumber
+from liteparse import LiteParse
 
+parser = LiteParse(
+    ocr_enabled=True,              # Enable OCR (default: True)
+    ocr_language="eng",            # Tesseract language code
+    max_pages=1000,                # Max pages to parse
+    dpi=150,                       # Rendering DPI
+    output_format="markdown",          # "json" | "text" | "markdown"
+    image_mode="placeholder",      # Markdown image handling: "placeholder" | "off" | "embed"
+    extract_links=True,            # Render [text](url) links in markdown output
+    preserve_very_small_text=True, # Keep tiny text
+    password=None,                 # Password for protected documents
+    quiet=False,                   # Suppress progress output
+    num_workers=4,                 # Concurrent OCR workers
+)
 
 def extract_pdf(file_bytes: bytes) -> str:
-    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-        pages = [page.extract_text() or "" for page in pdf.pages]
-    return "\n".join(pages).strip()
+    result = parser.parse(file_bytes)
+    return result.text
 
 
 def extract_url(url: str) -> str:
