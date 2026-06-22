@@ -73,25 +73,21 @@ export default function NotebooksPage() {
           </p>
         ) : (
           notebooks.map(nb => (
-            <div key={nb.id} className="notebook-list-item" style={{ position: 'relative' }}>
-              <Link to={`/notebook/${nb.id}`} style={{ display: 'contents' }}>
-                <span className="notebook-list-item-icon">📓</span>
-                <span className="notebook-list-item-title">{nb.title}</span>
-                <div className="notebook-list-item-meta">
-                  <span>{nb.sourceCount} sources</span>
-                  <span>{nb.updatedAt}</span>
-                </div>
-                <span className="notebook-list-item-arrow">›</span>
-              </Link>
+            <Link key={nb.id} to={`/notebook/${nb.id}`} className="notebook-list-item">
+              <span className="notebook-list-item-icon">📓</span>
+              <span className="notebook-list-item-title">{nb.title}</span>
+              <div className="notebook-list-item-meta">
+                <span>{nb.sourceCount} sources</span>
+                <span>{nb.updatedAt}</span>
+              </div>
               <button
-                className="btn-ghost"
-                onClick={e => { e.preventDefault(); setConfirmDelete(nb) }}
-                style={{ position: 'absolute', right: 36, top: '50%', transform: 'translateY(-50%)', fontSize: 16, padding: '2px 6px', color: 'var(--text-muted)', lineHeight: 1 }}
+                onClick={e => { e.preventDefault(); e.stopPropagation(); setConfirmDelete(nb) }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--text-muted)', lineHeight: 1, padding: '4px 2px', flexShrink: 0 }}
                 title="Delete notebook"
               >
                 ×
               </button>
-            </div>
+            </Link>
           ))
         )}
       </div>
