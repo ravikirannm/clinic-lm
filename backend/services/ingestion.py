@@ -3,6 +3,7 @@ from html.parser import HTMLParser
 
 import httpx
 from liteparse import LiteParse
+import re
 
 parser = LiteParse(
     ocr_enabled=True,              # Enable OCR (default: True)
@@ -20,7 +21,7 @@ parser = LiteParse(
 
 def extract_pdf(file_bytes: bytes) -> str:
     result = parser.parse(file_bytes)
-    return result.text
+    return re.sub(r'\n+', '\n', re.sub(r' +', ' ', result.text))
 
 
 def extract_url(url: str) -> str:

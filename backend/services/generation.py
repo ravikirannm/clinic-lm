@@ -49,18 +49,27 @@ def generate_notebook_content(sources: list[dict]) -> dict:
 
 def _generate_title_and_summary(client: ollama.Client, combined: str) -> dict:
     prompt = (
-        "You are a medical-scientific assistant. "
-        "Given the following clinical sources, produce a JSON object with two keys:\n"
-        '  "title"   – concise notebook title capturing the main topic (≤10 words)\n'
-        '  "summary" – 4-6 sentence plain-language summary of the most important clinical points\n\n'
+        "You are a medical-scientific summarization engine. "
+        "Read the clinical sources below and extract a title and summary, using ONLY information "
+        "explicitly present in the sources. Do not add outside medical knowledge, infer missing details, "
+        "or resolve conflicts between sources — if sources disagree, state that they disagree.\n\n"
+        "Output rules:\n"
+        "- Return ONLY a single valid JSON object. No markdown fences, no preamble, no trailing text.\n"
+        "- Keys must be exactly: title, summary\n"
+        '  "title": concise notebook title capturing the main topic, ≤10 words, no quotes inside the string\n'
+        '  "summary": 4-6 sentences, plain language, covering the most clinically important points only\n'
+        "- If the sources contain insufficient clinical content to summarize, set "
+        '"summary" to "Insufficient clinical content in provided sources." and choose a neutral title.\n\n'
         f"Sources:\n{combined}"
     )
+    logger.warning(f"\n\n\n Prompt {prompt}")
     response = client.chat(
         model=OLLAMA_MODEL,
         messages=[{"role": "user", "content": prompt}],
         format=_TitleAndSummary.model_json_schema(),
     )
     content = response["message"]["content"]
+    logger.warning(f"\n\n\n content {content}")
     return _TitleAndSummary.model_validate_json(content).model_dump()
 
 
