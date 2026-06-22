@@ -10,26 +10,30 @@ type Tab = 'pdf' | 'url' | 'text'
 
 export default function AddSourceModal({ onClose, onSubmit }: Props) {
   const [tab, setTab] = useState<Tab>('pdf')
-  const [url, setUrl] = useState('')
+  const [urls, setUrls] = useState('')
   const [text, setText] = useState('')
-  const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
   const [loading, setLoading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const canSubmit =
-    tab === 'pdf' ? file !== null
-    : tab === 'url' ? url.trim().length > 0
+    tab === 'pdf' ? files.length > 0
+    : tab === 'url' ? urls.trim().length > 0
     : text.trim().length > 0
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setFiles(Array.from(e.target.files ?? []))
+  }
 
   async function handleSubmit() {
     if (!canSubmit || loading) return
     setLoading(true)
     try {
-      if (tab === 'pdf' && file) {
-        await onSubmit({ type: 'pdf', file })
+      if (tab === 'pdf') {
+        await onSubmit({ type: 'pdf', files })
       } else if (tab === 'url') {
-        await onSubmit({ type: 'url', url: url.trim() })
-      } else if (tab === 'text') {
+        await onSubmit({ type: 'url', urls: urls.trim() })
+      } else {
         await onSubmit({ type: 'text', text: text.trim() })
       }
       onClose()
@@ -73,24 +77,27 @@ export default function AddSourceModal({ onClose, onSubmit }: Props) {
               <input
                 type="file"
                 accept=".pdf"
+                multiple
                 ref={fileInputRef}
-                onChange={e => setFile(e.target.files?.[0] ?? null)}
+                onChange={handleFileChange}
               />
               <div className="file-drop-zone-icon">📄</div>
-              {file
-                ? <span style={{ color: 'var(--text)' }}>{file.name}</span>
-                : <span>Click to choose a PDF</span>
-              }
+              {files.length === 0 && <span>Click to choose one or more PDFs</span>}
+              {files.length === 1 && <span style={{ color: 'var(--text)' }}>{files[0].name}</span>}
+              {files.length > 1 && (
+                <span style={{ color: 'var(--text)' }}>{files.length} files selected</span>
+              )}
             </label>
           )}
 
           {tab === 'url' && (
-            <input
-              type="url"
-              placeholder="https://pubmed.ncbi.nlm.nih.gov/…"
-              value={url}
-              onChange={e => setUrl(e.target.value)}
+            <textarea
+              rows={5}
+              placeholder={"https://pubmed.ncbi.nlm.nih.gov/…\nhttps://example.com/guideline.html"}
+              value={urls}
+              onChange={e => setUrls(e.target.value)}
               autoFocus
+              style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: 14 }}
             />
           )}
 

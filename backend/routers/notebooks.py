@@ -129,17 +129,16 @@ def get_notebook(notebook_id: str, request: Request):
     }
 
 
-# ── Add source ────────────────────────────────────────────────────────────────
+# ── Add sources ───────────────────────────────────────────────────────────────
 
 @router.post("/{notebook_id}/sources")
-async def add_source(
+async def add_sources(
     notebook_id: str,
     request: Request,
     background_tasks: BackgroundTasks,
-    source_type: str = Form(...),
-    url: Optional[str] = Form(None),
+    files: list[UploadFile] = File(default=[]),
+    urls: Optional[str] = Form(None),
     text: Optional[str] = Form(None),
-    file: Optional[UploadFile] = File(None),
 ):
     uid = _user_id(request)
 
@@ -152,39 +151,53 @@ async def add_source(
             if not cur.fetchone():
                 return JSONResponse(status_code=404, content={"error": "Not found"})
 
-    # Extract content
-    source_id = str(uuid.uuid4())
-    content = ""
-    name = ""
-
-    if source_type == "pdf" and file:
-        file_bytes = await file.read()
-        content = extract_pdf(file_bytes)
-        name = file.filename or "document.pdf"
-    elif source_type == "url" and url:
-        content = extract_url(url.strip())
-        name = url.strip()
-    elif source_type == "text" and text:
-        content = text.strip()
-    else:
-        return JSONResponse(status_code=400, content={"error": "Invalid source data"})
-
-    # De-identify PII/PHI before saving or indexing anything
     from services.anonymizer import anonymize
-    content = anonymize(content)
 
-    # Derive text-source name after anonymization so the label is also de-identified
-    if source_type == "text":
+    new_sources: list[dict] = []
+
+    for file in files:
+        if not file.filename:
+            continue
+        file_bytes = await file.read()
+        content = anonymize(extract_pdf(file_bytes))
+        new_sources.append({
+            "id": str(uuid.uuid4()),
+            "type": "pdf",
+            "name": file.filename,
+            "content": content,
+        })
+
+    if urls:
+        for url in urls.split():
+            url = url.strip()
+            if not url:
+                continue
+            content = anonymize(extract_url(url))
+            new_sources.append({
+                "id": str(uuid.uuid4()),
+                "type": "url",
+                "name": url,
+                "content": content,
+            })
+
+    if text and text.strip():
+        content = anonymize(text.strip())
         name = (content[:60] + "…") if len(content) > 60 else content
+        new_sources.append({
+            "id": str(uuid.uuid4()),
+            "type": "text",
+            "name": name,
+            "content": content,
+        })
 
-    # Merge with existing sources
+    if not new_sources:
+        return JSONResponse(status_code=400, content={"error": "No valid sources provided"})
+
     db = get_db()
     existing_doc = db.notebook_content.find_one({"notebook_id": notebook_id}) or {}
     existing_sources: list = existing_doc.get("sources", [])
-    new_source = {"id": source_id, "type": source_type, "name": name, "content": content}
-    all_sources = existing_sources + [new_source]
+    all_sources = existing_sources + new_sources
 
-    # Generate documentation via Ollama
     generated = generate_notebook_content(all_sources)
     title = generated["title"]
     documentation = generated["documentation"]
@@ -192,7 +205,6 @@ async def add_source(
 
     now = _now()
 
-    # Persist to MongoDB
     db.notebook_content.update_one(
         {"notebook_id": notebook_id},
         {
@@ -206,7 +218,6 @@ async def add_source(
         upsert=True,
     )
 
-    # Update PostgreSQL metadata
     source_titles = [s["name"] for s in all_sources]
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -220,13 +231,11 @@ async def add_source(
             )
         conn.commit()
 
-    # Index source content into the per-notebook vector store (runs after response)
-    background_tasks.add_task(NotebookRAG.index_source, notebook_id, source_id, name, content)
+    for s in new_sources:
+        background_tasks.add_task(NotebookRAG.index_source, notebook_id, s["id"], s["name"], s["content"])
 
     return {
-        "source_id": source_id,
-        "name": name,
-        "type": source_type,
+        "sources": [{"id": s["id"], "type": s["type"], "name": s["name"]} for s in new_sources],
         "title": title,
         "documentation": documentation,
         "summary": summary,

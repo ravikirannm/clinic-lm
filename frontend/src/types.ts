@@ -67,8 +67,8 @@ export interface ClinicalAnalysis {
 
 export interface AddSourceData {
   type: 'pdf' | 'url' | 'text'
-  file?: File
-  url?: string
+  files?: File[]
+  urls?: string
   text?: string
 }
 

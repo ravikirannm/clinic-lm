@@ -35,9 +35,10 @@ export default function NotebookPage() {
     setAddingSource(true)
     try {
       const form = new FormData()
-      form.append('source_type', data.type)
-      if (data.type === 'pdf' && data.file) form.append('file', data.file)
-      if (data.type === 'url' && data.url) form.append('url', data.url)
+      if (data.type === 'pdf' && data.files) {
+        for (const f of data.files) form.append('files', f)
+      }
+      if (data.type === 'url' && data.urls) form.append('urls', data.urls)
       if (data.type === 'text' && data.text) form.append('text', data.text)
 
       const res = await fetch(`/api/notebooks/${id}/sources`, {
@@ -50,10 +51,7 @@ export default function NotebookPage() {
       setNotebook(prev => prev ? {
         ...prev,
         title: result.title,
-        sources: [
-          ...prev.sources,
-          { id: result.source_id, type: data.type, name: result.name },
-        ],
+        sources: [...prev.sources, ...(result.sources ?? [])],
         documentation: result.documentation,
         summary: result.summary,
       } : prev)
