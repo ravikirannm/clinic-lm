@@ -7,8 +7,8 @@ from config import OLLAMA_BASE_URL, OLLAMA_MODEL
 
 logger = logging.getLogger(__name__)
 
-_CHUNK_SIZE = 3000
-_CHUNK_OVERLAP = 300
+_CHUNK_SIZE = 10000
+_CHUNK_OVERLAP = 400
 
 
 class _TitleAndSummary(BaseModel):
@@ -29,10 +29,11 @@ def generate_notebook_content(sources: list[dict]) -> dict:
     client = ollama.Client(host=OLLAMA_BASE_URL)
 
     chunks = _chunk_text(combined)
-
+    logger.warning(f"Chunks: {len(chunks)}")
     chunk_docs: list[str] = []
     for i, chunk in enumerate(chunks):
         try:
+            logger.warning(f"Chunk Size: {len(chunk)}")
             doc = _generate_chunk_documentation(client, chunk)
             if doc:
                 chunk_docs.append(doc)

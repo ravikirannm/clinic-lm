@@ -114,6 +114,10 @@ export default function AddSourceModal({ onClose, onSubmit }: Props) {
           )}
         </div>
 
+        <div style={{ padding: '8px 16px', background: 'var(--surface-2)', borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+          Select "De-identify PII/PHI" to automatically redact names, dates, addresses, and other personal identifiers from the source before saving. This may add processing time.
+        </div>
+
         <div className="modal-footer">
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-muted)', marginRight: 'auto', whiteSpace: 'nowrap', cursor: 'pointer' }}>
             <input
