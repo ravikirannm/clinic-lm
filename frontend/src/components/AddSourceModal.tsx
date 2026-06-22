@@ -13,6 +13,7 @@ export default function AddSourceModal({ onClose, onSubmit }: Props) {
   const [urls, setUrls] = useState('')
   const [text, setText] = useState('')
   const [files, setFiles] = useState<File[]>([])
+  const [anonymize, setAnonymize] = useState(false)
   const [loading, setLoading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -30,11 +31,11 @@ export default function AddSourceModal({ onClose, onSubmit }: Props) {
     setLoading(true)
     try {
       if (tab === 'pdf') {
-        await onSubmit({ type: 'pdf', files })
+        await onSubmit({ type: 'pdf', files, anonymize })
       } else if (tab === 'url') {
-        await onSubmit({ type: 'url', urls: urls.trim() })
+        await onSubmit({ type: 'url', urls: urls.trim(), anonymize })
       } else {
-        await onSubmit({ type: 'text', text: text.trim() })
+        await onSubmit({ type: 'text', text: text.trim(), anonymize })
       }
       onClose()
     } finally {
@@ -114,6 +115,14 @@ export default function AddSourceModal({ onClose, onSubmit }: Props) {
         </div>
 
         <div className="modal-footer">
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-muted)', marginRight: 'auto', whiteSpace: 'nowrap', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={anonymize}
+              onChange={e => setAnonymize(e.target.checked)}
+            />
+            De-identify PII/PHI
+          </label>
           <button className="btn-ghost" onClick={onClose} disabled={loading}>Cancel</button>
           <button className="btn-primary" onClick={handleSubmit} disabled={!canSubmit || loading}>
             {loading ? 'Processing…' : 'Add source'}

@@ -40,6 +40,7 @@ export default function NotebookPage() {
       }
       if (data.type === 'url' && data.urls) form.append('urls', data.urls)
       if (data.type === 'text' && data.text) form.append('text', data.text)
+      form.append('anonymize', data.anonymize ? 'true' : 'false')
 
       const res = await fetch(`/api/notebooks/${id}/sources`, {
         method: 'POST',

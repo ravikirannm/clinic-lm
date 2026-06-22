@@ -70,6 +70,7 @@ export interface AddSourceData {
   files?: File[]
   urls?: string
   text?: string
+  anonymize?: boolean
 }
 
 export interface DrugMention {

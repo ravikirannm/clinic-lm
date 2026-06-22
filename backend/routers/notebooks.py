@@ -139,6 +139,7 @@ async def add_sources(
     files: list[UploadFile] = File(default=[]),
     urls: Optional[str] = Form(None),
     text: Optional[str] = Form(None),
+    anonymize: str = Form(default="false"),
 ):
     uid = _user_id(request)
 
@@ -151,7 +152,13 @@ async def add_sources(
             if not cur.fetchone():
                 return JSONResponse(status_code=404, content={"error": "Not found"})
 
-    from services.anonymizer import anonymize
+    should_anonymize = anonymize.lower() == "true"
+
+    def _process(content: str) -> str:
+        if not should_anonymize:
+            return content
+        from services.anonymizer import anonymize as _anonymize
+        return _anonymize(content)
 
     new_sources: list[dict] = []
 
@@ -159,7 +166,7 @@ async def add_sources(
         if not file.filename:
             continue
         file_bytes = await file.read()
-        content = anonymize(extract_pdf(file_bytes))
+        content = _process(extract_pdf(file_bytes))
         new_sources.append({
             "id": str(uuid.uuid4()),
             "type": "pdf",
@@ -172,7 +179,7 @@ async def add_sources(
             url = url.strip()
             if not url:
                 continue
-            content = anonymize(extract_url(url))
+            content = _process(extract_url(url))
             new_sources.append({
                 "id": str(uuid.uuid4()),
                 "type": "url",
@@ -181,7 +188,7 @@ async def add_sources(
             })
 
     if text and text.strip():
-        content = anonymize(text.strip())
+        content = _process(text.strip())
         name = (content[:60] + "…") if len(content) > 60 else content
         new_sources.append({
             "id": str(uuid.uuid4()),
