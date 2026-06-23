@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Literal, Optional
 
 _CONF_FIELD = Field(
     default=0.8,
@@ -28,31 +28,68 @@ class PubMedSearchRequest(BaseModel):
     pubmed: PubMedSearchQuery
     confidence: float = _CONF_FIELD
 
-class DifferentialDiagnosis(BaseModel):
+class EvidenceItem(BaseModel):
+    source_type: Literal["patient_document", "rag_knowledge_base", "pubmed", "clinical_guideline"]
+    source_id: str = Field(description="PMID, RAG chunk id, or document identifier — never freeform")
+    evidence_grade: Literal[
+        "systematic_review", "rct", "cohort_study", "case_control",
+        "case_report", "expert_consensus", "patient_reported"
+    ]
+    finding: str = Field(description="The specific claim this source supports, in plain language")
+
+
+class DifferentialCondition(BaseModel):
     name: str
-    likelihood: str
-    reasoning: str
-    supporting_evidence: str
-    unconfirmed_hallmark_symptoms: list[str]
+    icd11_code: str = Field(description="Best-matching ICD-11 code. Append '(approximate)' if not certain")
+    epidemiological_prior: str = Field(
+        description="Baseline prevalence reasoning for this patient's demographic, stated BEFORE symptom matching. "
+                    "If demographics are unknown, say so explicitly and use general population base rate."
+    )
+    posterior_likelihood: Literal["high", "medium", "low", "very_low"]
+    likelihood_rationale: str = Field(
+        description="Name which specific reported symptoms raised probability, which lowered it, "
+                    "and how the prior moved to this posterior. This is the Bayesian update step — show the work."
+    )
+    supporting_evidence: List[EvidenceItem]
+    refuting_evidence: List[EvidenceItem] = Field(
+        description="Evidence AGAINST this condition. If genuinely none exists in the provided sources, "
+                    "include one EvidenceItem with finding='no disconfirming evidence identified in available sources'. "
+                    "Never omit this field — an empty list is not the same as an explicit absence statement."
+    )
+    unconfirmed_hallmark_symptoms: List[str]
 
 
-class ClinicalRedFlag(BaseModel):
+class RedFlag(BaseModel):
     symptom: str
     associated_condition: str
+    clinical_decision_rule: Optional[str] = Field(
+        default=None, description="Named validated score if one applies, e.g. 'CURB-65', 'Wells Score', 'NEWS2'"
+    )
     action: str
 
 
-class DiagnosticTest(BaseModel):
+class RecommendedTest(BaseModel):
     test: str
-    reason: str
     targets_condition: str
+    diagnostic_value: str = Field(
+        description="What a positive vs. negative result does to the probability of the targeted condition — "
+                    "not just 'confirms' or 'rules out'"
+    )
+    priority: Literal["stat", "urgent", "routine"]
 
 
 class ClinicalAssessment(BaseModel):
-    possible_conditions: list[DifferentialDiagnosis]
-    red_flags: list[ClinicalRedFlag]
-    recommended_tests: list[DiagnosticTest]
-    confidence: float = _CONF_FIELD
+    possible_conditions: List[DifferentialCondition]
+    next_best_discriminator: str = Field(
+        description="The single highest-yield question or test that would most reduce uncertainty between "
+                    "the top two differentials, and why it outperforms the alternatives"
+    )
+    red_flags: List[RedFlag]
+    recommended_tests: List[RecommendedTest]
+    confidence: float = Field(
+        ge=0.0, le=1.0,
+        description="Confidence in THIS ASSESSMENT given evidence completeness — not diagnostic certainty about the patient"
+    )
 
 
 # ── Drug Interaction ──────────────────────────────────────────────────────────

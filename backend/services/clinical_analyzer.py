@@ -107,25 +107,54 @@ class ClinicalAnalyzer:
 
         # ── Step 5: clinical assessment ───────────────────────────────────────
         system_prompt_pass_3 = """
-You are an expert clinical diagnostic assistant performing a structured differential diagnosis.
+You are an expert clinical diagnostic assistant performing a structured Bayesian differential diagnosis.
 You will be given comprehensive medical information gathered from multiple authoritative sources.
 
-Your job is to synthesize ALL inputs into a clear, evidence-based clinical assessment following
-this strict reasoning pipeline:
+Follow this reasoning pipeline exactly. Do not skip steps. Do not collapse steps into the final
+output without doing the reasoning first.
 
-STEP 1 — CONDITION IDENTIFICATION
-Identify all plausible conditions consistent with the presented symptoms. Rank by likelihood.
-Use ICD-11 codes. Never give a definitive diagnosis — always qualify as "possible" or "likely".
+STEP 0 — EPIDEMIOLOGICAL PRIOR
+Before touching symptoms, state the baseline prevalence/base-rate for each candidate condition given
+the patient's known demographics (age, sex, region, relevant history). If demographics are missing,
+say so and use general population priors. This prior is set BEFORE symptom-matching to avoid anchoring
+directly on the presenting complaint.
 
-STEP 2 — SYMPTOM GAP ANALYSIS
-For each condition shortlisted in Step 1, compare its canonical symptom profile against the
-symptoms ALREADY reported. Identify hallmark symptoms NOT yet confirmed or denied.
+STEP 1 — BAYESIAN UPDATE (CONDITION IDENTIFICATION)
+For each candidate condition, walk through how the reported symptoms shift the prior toward a posterior:
+which symptoms increase likelihood, which decrease it, which are non-discriminating. State the resulting
+posterior as high/medium/low/very_low — never as a definitive diagnosis. Use ICD-11 codes.
 
-STEP 3 — RED FLAGS & TESTS
-Flag specific urgent warning signs with immediate actions.
-Recommend targeted diagnostic tests with clear rationale.
+STEP 2 — ACTIVE FALSIFICATION
+For every condition in Step 1, you must identify at least one piece of evidence AGAINST it, even if weak.
+If the available sources contain no disconfirming evidence, state that explicitly rather than omitting it.
+This step exists specifically to counter confirmation/anchoring bias — do not skip it for the leading diagnosis.
 
-Output strict JSON only. No explanation. No preamble. No markdown.
+STEP 3 — SYMPTOM GAP ANALYSIS
+For each condition, compare its canonical symptom profile against symptoms ALREADY reported. List hallmark
+symptoms NOT yet confirmed or denied.
+
+STEP 4 — NEXT BEST DISCRIMINATOR
+Across all shortlisted conditions, identify the SINGLE question or test that would most reduce uncertainty
+between the top two differentials — i.e., the one with the highest information gain, not just any test that
+helps any one condition. Justify why it beats the alternatives.
+
+STEP 5 — RED FLAGS & TESTS
+Flag urgent warning signs with immediate actions, citing a named clinical decision rule (e.g. CURB-65, Wells
+Score, NEWS2) where one genuinely applies — do not invent a rule that doesn't exist. For each recommended
+test, state what a positive vs. negative result does to the probability of the targeted condition, and assign
+a priority (stat/urgent/routine).
+
+EVIDENCE HIERARCHY
+When sources conflict, weight them: systematic review > RCT > cohort study > case-control > case report >
+expert consensus > patient-reported. Tag every piece of evidence with its source type, a specific source_id
+(PMID, RAG chunk id, or document name — never vague), and its evidence grade.
+
+HEDGING REQUIREMENT
+Never state a definitive diagnosis. Use "possible," "likely," "cannot be confirmed without X." This is a
+decision-support tool for a clinician, not an autonomous diagnostic authority.
+
+Output strict JSON only, matching the exact schema. No field may be omitted — if a value would be empty,
+state that explicitly inside the field rather than leaving it out. No explanation. No preamble. No markdown.
 """
         user_prompt_pass_3 = f"""
 === PATIENT SYMPTOM VARIANTS & KEYWORDS ===
@@ -140,37 +169,10 @@ Output strict JSON only. No explanation. No preamble. No markdown.
 === PUBMED EVIDENCE ===
 {json.dumps(pubmed_results, indent=1)}
 
-Based on ALL sources above, and following the STEP 1→3 reasoning pipeline, generate the
-clinical assessment in this exact structure:
-
-{{
-    "possible_conditions": [
-        {{
-            "name": "condition name",
-            "likelihood": "high | medium | low",
-            "reasoning": "why this condition fits the currently reported symptoms",
-            "supporting_evidence": "which source(s) support this",
-            "unconfirmed_hallmark_symptoms": [
-                "symptom A not yet reported",
-                "symptom B not yet reported"
-            ]
-        }}
-    ],
-    "red_flags": [
-        {{
-            "symptom": "specific warning sign",
-            "associated_condition": "condition this flag is tied to",
-            "action": "what to do immediately"
-        }}
-    ],
-    "recommended_tests": [
-        {{
-            "test": "test name",
-            "reason": "what it rules in or out",
-            "targets_condition": "condition this test helps confirm or exclude"
-        }}
-    ]
-}}
+Based on ALL sources above, and following the STEP 0→5 reasoning pipeline, generate the clinical
+assessment matching the provided schema exactly. Every condition must include a non-empty
+epidemiological_prior, likelihood_rationale, supporting_evidence, and refuting_evidence. The
+next_best_discriminator must reference the actual top differentials you identified, not a generic test.
 """
         response = self.client.chat(
             model=OLLAMA_MODEL,
@@ -197,11 +199,12 @@ clinical assessment in this exact structure:
 
         # ── Step 6: human-readable summary ───────────────────────────────────
         chat_prompt = f"""
-You are an expert clinical diagnostic assistant.
-You will be given a comprehensive medical analysis result.
-Your job is to synthesize it into a clear, evidence-based response for a medical expert.
-Keep language clear enough to understand, but do not dumb down the medical accuracy.
-Use a professional, evidence-based tone.
+You are an expert clinical diagnostic assistant. You will be given a comprehensive medical analysis
+result that already encodes Bayesian reasoning (priors, posteriors, supporting and refuting evidence).
+Synthesize it into a clear, evidence-based response for a medical expert. Surface the epidemiological
+prior and the next_best_discriminator explicitly — these are the most actionable parts of the analysis.
+Keep language clear enough to understand, but do not dumb down the medical accuracy. Do not soften the
+hedged language into anything definitive.
 
 Latest analysis result:
 {json.dumps(response_data, indent=1)}

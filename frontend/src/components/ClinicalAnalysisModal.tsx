@@ -31,18 +31,43 @@ export default function ClinicalAnalysisModal({ analysis, onClose }: Props) {
             </Section>
           )}
 
+          {symptom_analysis?.next_best_discriminator && (
+            <Section title="Next Best Discriminator">
+              <div style={{ ...cardStyle, borderLeft: '3px solid #6366f1' }}>
+                <p style={mutedText}>{symptom_analysis.next_best_discriminator}</p>
+              </div>
+            </Section>
+          )}
+
           {symptom_analysis?.possible_conditions?.length > 0 && (
             <Section title="Possible Conditions">
               {symptom_analysis.possible_conditions.map((c: PossibleCondition, i: number) => (
                 <div key={i} style={cardStyle}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <strong style={{ fontSize: 14 }}>{c.name}</strong>
-                    <span style={likelihoodBadge(c.likelihood)}>{c.likelihood}</span>
+                    <div>
+                      <strong style={{ fontSize: 14 }}>{c.name}</strong>
+                      {c.icd11_code && (
+                        <span style={{ ...mutedText, fontSize: 11, marginLeft: 8 }}>{c.icd11_code}</span>
+                      )}
+                    </div>
+                    <span style={likelihoodBadge(c.posterior_likelihood)}>{c.posterior_likelihood.replace('_', ' ')}</span>
                   </div>
-                  <p style={mutedText}>{c.reasoning}</p>
-                  {c.supporting_evidence && (
+                  {c.epidemiological_prior && (
+                    <p style={{ ...mutedText, marginTop: 2 }}>
+                      <span style={{ fontWeight: 500 }}>Prior: </span>{c.epidemiological_prior}
+                    </p>
+                  )}
+                  <p style={{ ...mutedText, marginTop: 4 }}>{c.likelihood_rationale}</p>
+                  {c.supporting_evidence?.length > 0 && (
                     <p style={{ ...mutedText, marginTop: 4 }}>
-                      <span style={{ fontWeight: 500 }}>Evidence: </span>{c.supporting_evidence}
+                      <span style={{ fontWeight: 500 }}>Supporting: </span>
+                      {c.supporting_evidence.map(e => e.finding).join(' · ')}
+                    </p>
+                  )}
+                  {c.refuting_evidence?.length > 0 && (
+                    <p style={{ ...mutedText, marginTop: 2 }}>
+                      <span style={{ fontWeight: 500 }}>Against: </span>
+                      {c.refuting_evidence.map(e => e.finding).join(' · ')}
                     </p>
                   )}
                   {c.unconfirmed_hallmark_symptoms?.length > 0 && (
@@ -65,6 +90,11 @@ export default function ClinicalAnalysisModal({ analysis, onClose }: Props) {
                   <p style={{ ...mutedText, marginTop: 2 }}>
                     <span style={{ fontWeight: 500 }}>Associated: </span>{rf.associated_condition}
                   </p>
+                  {rf.clinical_decision_rule && (
+                    <p style={{ ...mutedText, marginTop: 2 }}>
+                      <span style={{ fontWeight: 500 }}>Rule: </span>{rf.clinical_decision_rule}
+                    </p>
+                  )}
                 </div>
               ))}
             </Section>
@@ -74,8 +104,11 @@ export default function ClinicalAnalysisModal({ analysis, onClose }: Props) {
             <Section title="Recommended Tests">
               {symptom_analysis.recommended_tests.map((t: RecommendedTest, i: number) => (
                 <div key={i} style={cardStyle}>
-                  <strong style={{ fontSize: 13 }}>{t.test}</strong>
-                  <p style={{ ...mutedText, marginTop: 4 }}>{t.reason}</p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <strong style={{ fontSize: 13 }}>{t.test}</strong>
+                    <span style={priorityBadge(t.priority)}>{t.priority}</span>
+                  </div>
+                  <p style={{ ...mutedText, marginTop: 4 }}>{t.diagnostic_value}</p>
                   <p style={{ ...mutedText, marginTop: 2 }}>
                     <span style={{ fontWeight: 500 }}>Targets: </span>{t.targets_condition}
                   </p>
@@ -132,7 +165,25 @@ function likelihoodBadge(likelihood: string): React.CSSProperties {
   const color =
     likelihood === 'high' ? '#ef4444'
     : likelihood === 'medium' ? '#f59e0b'
-    : '#22c55e'
+    : likelihood === 'low' ? '#22c55e'
+    : '#94a3b8'
+  return {
+    background: color + '1a',
+    color,
+    borderRadius: 4,
+    padding: '2px 8px',
+    fontSize: 11,
+    fontWeight: 600,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+  }
+}
+
+function priorityBadge(priority: string): React.CSSProperties {
+  const color =
+    priority === 'stat' ? '#ef4444'
+    : priority === 'urgent' ? '#f59e0b'
+    : '#64748b'
   return {
     background: color + '1a',
     color,

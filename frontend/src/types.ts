@@ -25,24 +25,36 @@ export interface Message {
   content: string
 }
 
+export interface EvidenceItem {
+  source_type: 'patient_document' | 'rag_knowledge_base' | 'pubmed' | 'clinical_guideline'
+  source_id: string
+  evidence_grade: 'systematic_review' | 'rct' | 'cohort_study' | 'case_control' | 'case_report' | 'expert_consensus' | 'patient_reported'
+  finding: string
+}
+
 export interface PossibleCondition {
   name: string
-  likelihood: string
-  reasoning: string
-  supporting_evidence: string
+  icd11_code: string
+  epidemiological_prior: string
+  posterior_likelihood: 'high' | 'medium' | 'low' | 'very_low'
+  likelihood_rationale: string
+  supporting_evidence: EvidenceItem[]
+  refuting_evidence: EvidenceItem[]
   unconfirmed_hallmark_symptoms: string[]
 }
 
 export interface RedFlag {
   symptom: string
   associated_condition: string
+  clinical_decision_rule?: string
   action: string
 }
 
 export interface RecommendedTest {
   test: string
-  reason: string
+  diagnostic_value: string
   targets_condition: string
+  priority: 'stat' | 'urgent' | 'routine'
 }
 
 export interface PubMedResult {
@@ -58,6 +70,7 @@ export interface ClinicalAnalysis {
   pubmed_results: PubMedResult[]
   symptom_analysis: {
     possible_conditions: PossibleCondition[]
+    next_best_discriminator: string
     red_flags: RedFlag[]
     recommended_tests: RecommendedTest[]
   }
