@@ -583,3 +583,7 @@ textarea {
   // Remove top margin on first child
   > *:first-child { margin-top: 0; }
 }
+
+ul, ol {
+  padding-left: 24px;
+}
