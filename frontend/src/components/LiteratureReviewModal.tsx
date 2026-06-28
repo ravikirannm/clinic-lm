@@ -24,12 +24,12 @@ export default function LiteratureReviewModal({ result, onClose }: Props) {
 
         <div style={{ overflowY: 'auto', padding: '0 24px 24px', flex: 1 }}>
 
-          {query && (
+          {/* {query && (
             <div style={queryBox}>
               <span style={queryLabel}>PubMed query</span>
               <code style={{ fontSize: 12, color: 'var(--text)', wordBreak: 'break-all' }}>{query}</code>
             </div>
-          )}
+          )} */}
 
           {articles.length === 0 ? (
             <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 20 }}>

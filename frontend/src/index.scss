@@ -587,3 +587,100 @@ textarea {
 ul, ol {
   padding-left: 24px;
 }
+
+// ── ICD-11 Tree ──────────────────────────────────────────────────────────────
+
+@keyframes icd-fade-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.icd-fade-in {
+  animation: icd-fade-in 0.22s ease forwards;
+}
+
+.icd-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &.active {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+
+  &:hover:not(.active) {
+    border-color: var(--accent);
+    background: var(--accent-light);
+    color: var(--accent);
+  }
+}
+
+.icd-tree-node-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  transition: background 0.12s ease;
+
+  &.icd-clickable {
+    cursor: pointer;
+
+    &:hover {
+      background: var(--surface-2);
+    }
+
+    &:active {
+      background: var(--accent-light);
+    }
+  }
+}
+
+.icd-chevron {
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+
+  &.expanded {
+    transform: rotate(90deg);
+  }
+}
+
+.icd-children {
+  opacity: 0;
+  transform: translateY(-5px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+
+  &.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// SVG connector animations — fire when parent .icd-children gains .visible
+@keyframes icd-draw-line {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes icd-arrow-appear {
+  from { opacity: 0; transform: scale(0.6); transform-origin: left center; }
+  to   { opacity: 0.75; transform: scale(1); transform-origin: left center; }
+}
+
+.icd-children.visible .icd-connector-line {
+  animation: icd-draw-line 0.2s ease forwards;
+}
+
+.icd-children.visible .icd-connector-arrow {
+  animation: icd-arrow-appear 0.15s 0.18s ease forwards;
+}
