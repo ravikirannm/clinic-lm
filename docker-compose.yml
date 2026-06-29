@@ -30,6 +30,7 @@ services:
     #           capabilities: [gpu]
     volumes:
       - ./backend:/app
+      - medcpt_db:/app/medcpt_db
     env_file:
       - .env
     depends_on:
@@ -80,3 +81,4 @@ volumes:
   frontend_node_modules:
   postgres_data:
   mongo_data:
+  medcpt_db:
