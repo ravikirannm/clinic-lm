@@ -314,3 +314,25 @@ export interface GuidelinesConformanceResult {
   not_assessed: GuidelineFinding[]
   overall_summary: string
 }
+
+// ── Users & Roles ─────────────────────────────────────────────────────────────
+
+export const ROLES = {
+  1: { id: 1, name: 'free', label: 'Free User' },
+  2: { id: 2, name: 'premium', label: 'Premium User' },
+  3: { id: 3, name: 'admin', label: 'Admin User' },
+} as const
+
+export type RoleId = keyof typeof ROLES
+
+export interface User {
+  user_id: string
+  name: string
+  email: string
+  role_id: RoleId
+}
+
+export interface UserRecord extends User {
+  is_verified: boolean
+  created_at: string | null
+}

@@ -19,7 +19,21 @@ router = APIRouter(prefix="/notebooks")
 
 
 def _user_id(request: Request) -> str:
-    return request.cookies.get("user_id", "")
+    session_id = request.cookies.get("session_id")
+    if not session_id:
+        return ""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT u.user_id FROM sessions s
+                JOIN users u ON u.user_id = s.user_id
+                WHERE s.session_id = %s AND s.expires_at > NOW()
+                """,
+                (session_id,),
+            )
+            row = cur.fetchone()
+    return str(row[0]) if row else ""
 
 
 def _now() -> datetime:

@@ -23,3 +23,8 @@ BIO_EMAIL = os.getenv("BIO_EMAIL", "")
 
 ICD11_CLIENT_ID = os.getenv("ICD11_CLIENT_ID", "")
 ICD11_CLIENT_SECRET = os.getenv("ICD11_CLIENT_SECRET", "")
+
+GOOGLE_EMAIL = os.getenv("GOOGLE_EMAIL", "")
+GOOGLE_PASSWORD = os.getenv("GOOGLE_PASSWORD", "")
+
+

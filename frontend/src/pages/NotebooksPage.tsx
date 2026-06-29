@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import type { Notebook } from '../types.ts'
+import { useCurrentUser } from '../context/UserContext'
+import type { Notebook } from '../types'
 
 export default function NotebooksPage() {
   const navigate = useNavigate()
+  const { user, logout } = useCurrentUser()
+
   const [notebooks, setNotebooks] = useState<Notebook[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -50,6 +53,8 @@ export default function NotebooksPage() {
     }
   }
 
+  const isAdmin = user?.role_id === 3
+
   return (
     <div className="notebooks-page">
       <div className="notebooks-header">
@@ -57,10 +62,21 @@ export default function NotebooksPage() {
           <h1>Clinic LM</h1>
           <p>AI-powered clinical notebooks</p>
         </div>
-        <button className="btn-primary" onClick={handleNew} disabled={creating}>
-          {creating ? 'Creating…' : '+ New notebook'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{user?.name}</span>
+          <button className="btn-primary" onClick={handleNew} disabled={creating}>
+            {creating ? 'Creating…' : '+ New notebook'}
+          </button>
+          <button className="btn-ghost" onClick={logout} style={{ fontSize: 13 }}>Sign out</button>
+        </div>
       </div>
+
+      {isAdmin && (
+        <div className="page-tabs">
+          <button className="page-tab page-tab--active">Notebooks</button>
+          <button className="page-tab" onClick={() => navigate('/users')}>Users</button>
+        </div>
+      )}
 
       <div className="notebooks-list">
         {loading ? (

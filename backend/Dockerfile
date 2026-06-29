@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Set the environment variable so the backend can locate the tessdata directory
 ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
+ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
