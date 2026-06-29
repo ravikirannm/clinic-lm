@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ICD11Match, ICD11TreeNode } from '../types.ts'
 
 interface Props {
@@ -6,10 +6,22 @@ interface Props {
   onClose: () => void
 }
 
+function useIsMobile() {
+  const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 768px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)')
+    const fn = (e: MediaQueryListEvent) => setMobile(e.matches)
+    mq.addEventListener('change', fn)
+    return () => mq.removeEventListener('change', fn)
+  }, [])
+  return mobile
+}
+
 export default function ICD11Modal({ result, onClose }: Props) {
   const { icd11_results } = result
   const [selectedCode, setSelectedCode] = useState<string>(icd11_results[0]?.code ?? '')
   const [treeKey, setTreeKey] = useState(0)
+  const isMobile = useIsMobile()
 
   const selectedMatch = icd11_results.find(r => r.code === selectedCode) ?? null
   const tree = selectedMatch?.tree ?? null
@@ -41,7 +53,7 @@ export default function ICD11Modal({ result, onClose }: Props) {
         {icd11_results.length > 0 && (
           <div style={{ padding: '0 24px 14px', borderBottom: '1px solid var(--border)' }}>
             <div style={sectionLabelStyle}>Matched conditions</div>
-            {icd11_results.length <= 5 ? (
+            {icd11_results.length <= 5 || isMobile ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {icd11_results.map(m => (
                   <button
@@ -361,15 +373,6 @@ function TreeNode({ node, depth = 0, isLast = false }: TreeNodeProps) {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const sectionLabelStyle: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  letterSpacing: '0.06em',
-  textTransform: 'uppercase',
-  color: 'var(--text-muted)',
-  marginBottom: 8,
-}
-
 const selectStyle: React.CSSProperties = {
   width: '100%',
   padding: '8px 10px',
@@ -379,6 +382,16 @@ const selectStyle: React.CSSProperties = {
   borderRadius: 'var(--radius)',
   color: 'var(--text)',
 }
+
+const sectionLabelStyle: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  color: 'var(--text-muted)',
+  marginBottom: 8,
+}
+
 
 const codeBadgeStyle: React.CSSProperties = {
   background: 'var(--accent)1a',

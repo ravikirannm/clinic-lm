@@ -430,6 +430,9 @@ textarea {
   flex-shrink: 0;
   background: var(--surface);
   border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
 }
 
 // ── Modal ────────────────────────────────────────────────
@@ -450,7 +453,7 @@ textarea {
   width: 440px;
   max-width: 92vw;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
-  overflow: hidden;
+  overflow: clip;
 
   &-header {
     padding: 18px 20px 0;
@@ -586,6 +589,128 @@ textarea {
 
 ul, ol {
   padding-left: 24px;
+}
+
+// ── Mobile tab bar (hidden on desktop) ───────────────────────────────────────
+
+.mobile-tab-bar {
+  display: none;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.mobile-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 9px 0 7px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  transition: color 0.15s;
+
+  &.active { color: var(--accent); }
+  &:hover:not(.active) { color: var(--text); }
+}
+
+.mobile-tab-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+// ── Responsive / Mobile ───────────────────────────────────────────────────────
+
+@media (max-width: 768px) {
+  .mobile-tab-bar { display: flex; }
+
+  // Use dynamic viewport height so the layout shrinks when the soft keyboard appears
+  .notebook-page { height: 100dvh; }
+
+  .notebook-header {
+    padding: 0 12px;
+    gap: 8px;
+
+    &-title {
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  // Panel show/hide — only the active panel is visible
+  .panel-left, .panel-middle, .panel-right {
+    &.mobile-hidden { display: none; }
+  }
+
+  .panel-left {
+    width: 100%;
+    border-right: none;
+    &.mobile-active { flex: 1; }
+  }
+
+  .panel-right {
+    width: 100%;
+    border-left: none;
+    &.mobile-active { flex: 1; }
+  }
+
+  // Chat
+  .summary-section { padding: 14px 16px; }
+
+  .chat-messages { padding: 12px 16px; }
+
+  .chat-bubble { max-width: 90%; }
+
+  .chat-input-bar {
+    padding: 10px 12px;
+    // keep above the virtual keyboard on iOS
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+
+  // Modals — taller allowed on phone, full-width sheet style
+  .modal-backdrop { align-items: flex-end; }
+
+  .modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 92dvh;
+    border-radius: 20px 20px 0 0;
+    margin: 0;
+  }
+
+  // Notebooks page
+  .notebooks-page { padding: 24px 16px; }
+
+  .notebooks-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 20px;
+
+    h1 { font-size: 20px; }
+    .btn-primary { text-align: center; }
+  }
+
+  .notebook-list-item {
+    padding: 12px 16px;
+    gap: 12px;
+
+    &-meta {
+      flex-direction: column;
+      gap: 2px;
+      align-items: flex-end;
+      font-size: 11px;
+    }
+  }
 }
 
 // ── ICD-11 Tree ──────────────────────────────────────────────────────────────

@@ -5,12 +5,13 @@ import type { Message } from '../types.ts'
 interface Props {
   summary?: string
   messages: Message[]
-  streamingContent: string   // content being streamed right now (empty when idle)
+  streamingContent: string
   onSend: (text: string) => void
   isStreaming: boolean
+  className?: string
 }
 
-export default function ChatPanel({ summary, messages, streamingContent, onSend, isStreaming }: Props) {
+export default function ChatPanel({ summary, messages, streamingContent, onSend, isStreaming, className }: Props) {
   const [input, setInput] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -33,7 +34,7 @@ export default function ChatPanel({ summary, messages, streamingContent, onSend,
   }
 
   return (
-    <main className="panel-middle">
+    <main className={`panel-middle${className ? ` ${className}` : ''}`}>
       {summary && (
         <div className="summary-section">
           <h2>Summary</h2>

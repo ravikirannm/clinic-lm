@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import type { DraftResult } from '../types.ts'
 
@@ -15,11 +15,23 @@ const TYPE_LABELS: Record<string, string> = {
   case_writeup:      'Case Write-up',
 }
 
+function useIsMobile() {
+  const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 768px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)')
+    const fn = (e: MediaQueryListEvent) => setMobile(e.matches)
+    mq.addEventListener('change', fn)
+    return () => mq.removeEventListener('change', fn)
+  }, [])
+  return mobile
+}
+
 export default function DocumentDrafterModal({ drafts, initialType, onClose }: Props) {
   const available = TYPE_ORDER.filter(t => drafts[t])
   const defaultType = initialType && drafts[initialType] ? initialType : (available[0] ?? 'referral_letter')
   const [activeType, setActiveType] = useState(defaultType)
   const [copied, setCopied] = useState(false)
+  const isMobile = useIsMobile()
 
   const draft = drafts[activeType]
 
@@ -57,17 +69,41 @@ export default function DocumentDrafterModal({ drafts, initialType, onClose }: P
 
         <div style={{ overflowY: 'auto', padding: '0 24px 24px', flex: 1 }}>
 
-          {/* Dropdown selector + copy icon row */}
+          {/* Document type selector + copy icon row */}
           <div style={controlRow}>
-            <select
-              value={activeType}
-              onChange={e => { setActiveType(e.target.value); setCopied(false) }}
-              style={selectStyle}
-            >
-              {available.map(t => (
-                <option key={t} value={t}>{TYPE_LABELS[t] ?? t}</option>
-              ))}
-            </select>
+            {isMobile ? (
+              <div style={{ display: 'flex', gap: 6, flex: 1, flexWrap: 'wrap' }}>
+                {available.map(t => (
+                  <button
+                    key={t}
+                    onClick={() => { setActiveType(t); setCopied(false) }}
+                    style={{
+                      padding: '7px 14px',
+                      borderRadius: 20,
+                      border: activeType === t ? '1.5px solid var(--accent)' : '1px solid var(--border)',
+                      background: activeType === t ? 'var(--accent)' : 'var(--surface-2)',
+                      color: activeType === t ? '#fff' : 'var(--text)',
+                      fontSize: 13,
+                      fontWeight: activeType === t ? 600 : 400,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {TYPE_LABELS[t] ?? t}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <select
+                value={activeType}
+                onChange={e => { setActiveType(e.target.value); setCopied(false) }}
+                style={selectStyle}
+              >
+                {available.map(t => (
+                  <option key={t} value={t}>{TYPE_LABELS[t] ?? t}</option>
+                ))}
+              </select>
+            )}
 
             {draft && (
               <button onClick={handleCopy} style={copyBtn} title="Copy to clipboard">

@@ -12,11 +12,12 @@ import type { ClinicalAnalysis, DrugInteractionResult, ICD11Result, LiteratureRe
 
 interface Props {
   notebookId: string
+  className?: string
 }
 
 type Status = 'idle' | 'running' | 'done'
 
-export default function ToolsPanel({ notebookId }: Props) {
+export default function ToolsPanel({ notebookId, className }: Props) {
   const [analysisStatus, setAnalysisStatus] = useState<Status>('idle')
   const [analysis, setAnalysis] = useState<ClinicalAnalysis | null>(null)
   const [showAnalysisModal, setShowAnalysisModal] = useState(false)
@@ -193,7 +194,7 @@ export default function ToolsPanel({ notebookId }: Props) {
   }
 
   return (
-    <aside className="panel-right" style={{ display: 'flex', flexDirection: 'column' }}>
+    <aside className={`panel-right${className ? ` ${className}` : ''}`}>
       <div className="panel-section-title">Tools</div>
 
       <Tool

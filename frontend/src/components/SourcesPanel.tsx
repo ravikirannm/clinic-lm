@@ -5,13 +5,14 @@ import type { AddSourceData, Source } from '../types.ts'
 interface Props {
   sources: Source[]
   onAddSource: (data: AddSourceData) => Promise<void>
+  className?: string
 }
 
-export default function SourcesPanel({ sources, onAddSource }: Props) {
+export default function SourcesPanel({ sources, onAddSource, className }: Props) {
   const [showModal, setShowModal] = useState(false)
 
   return (
-    <aside className="panel-left">
+    <aside className={`panel-left${className ? ` ${className}` : ''}`}>
       <div className="panel-section-title">Sources</div>
 
       <div className="source-list">

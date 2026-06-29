@@ -14,6 +14,7 @@ export default function NotebookPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [streamingContent, setStreamingContent] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
+  const [mobileTab, setMobileTab] = useState<'sources' | 'chat' | 'tools'>('chat')
 
   useEffect(() => {
     if (!id) return
@@ -138,6 +139,8 @@ export default function NotebookPage() {
           <Link to="/" className="btn-ghost" style={{ textDecoration: 'none' }}>← Back</Link>
           <span className="notebook-header-title">Loading…</span>
         </header>
+        <div className="notebook-layout" />
+        <nav className="mobile-tab-bar" />
       </div>
     )
   }
@@ -158,18 +161,47 @@ export default function NotebookPage() {
 
       <div className="notebook-layout">
         <SourcesPanel
+          className={mobileTab !== 'sources' ? 'mobile-hidden' : 'mobile-active'}
           sources={notebook?.sources ?? []}
           onAddSource={handleAddSource}
         />
         <ChatPanel
+          className={mobileTab !== 'chat' ? 'mobile-hidden' : 'mobile-active'}
           summary={notebook?.summary ?? undefined}
           messages={messages}
           streamingContent={streamingContent}
           isStreaming={isStreaming}
           onSend={handleSend}
         />
-        <ToolsPanel notebookId={id ?? ''} />
+        <ToolsPanel
+          className={mobileTab !== 'tools' ? 'mobile-hidden' : 'mobile-active'}
+          notebookId={id ?? ''}
+        />
       </div>
+
+      <nav className="mobile-tab-bar">
+        <button
+          className={`mobile-tab${mobileTab === 'sources' ? ' active' : ''}`}
+          onClick={() => setMobileTab('sources')}
+        >
+          <span className="mobile-tab-icon">📁</span>
+          <span>Sources</span>
+        </button>
+        <button
+          className={`mobile-tab${mobileTab === 'chat' ? ' active' : ''}`}
+          onClick={() => setMobileTab('chat')}
+        >
+          <span className="mobile-tab-icon">💬</span>
+          <span>Chat</span>
+        </button>
+        <button
+          className={`mobile-tab${mobileTab === 'tools' ? ' active' : ''}`}
+          onClick={() => setMobileTab('tools')}
+        >
+          <span className="mobile-tab-icon">🔬</span>
+          <span>Tools</span>
+        </button>
+      </nav>
     </div>
   )
 }
