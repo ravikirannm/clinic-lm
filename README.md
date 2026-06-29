@@ -175,37 +175,14 @@ clinic-lm/
 
 ## Environment Variables
 
-Create a `.env` file in the project root (next to `docker-compose.yml`). All variables are consumed by the backend via `config.py`.
+A template with all required variables and instructions is provided at [`.env.example`](.env.example).
 
-```env
-# PostgreSQL
-POSTGRES_HOST=postgres
-POSTGRES_PORT=5432
-POSTGRES_DB=clinic_db
-POSTGRES_USER=clinic_user
-POSTGRES_PASSWORD=your_secure_password
-
-# MongoDB
-MONGODB_URI=mongodb://clinic_user:clinic_pass@mongodb:27017/clinic_db?authSource=admin
-MONGO_INITDB_ROOT_USERNAME=clinic_user
-MONGO_INITDB_ROOT_PASSWORD=clinic_pass
-MONGO_INITDB_DATABASE=clinic_db
-
-# Ollama (runs on host, not in Docker)
-OLLAMA_BASE_URL=http://host.docker.internal:11434
-OLLAMA_MODEL=qwen2.5:7b
-
-# Email (Gmail SMTP — use an App Password, not your account password)
-GOOGLE_EMAIL=your@gmail.com
-GOOGLE_PASSWORD=xxxx xxxx xxxx xxxx
-
-# PubMed / NCBI (used for literature queries — use your own email to be a good citizen)
-BIO_EMAIL=your@email.com
-
-# ICD-11 (WHO API — register at https://icd.who.int/icdapi)
-ICD11_CLIENT_ID=your_client_id
-ICD11_CLIENT_SECRET=your_client_secret
+```bash
+cp .env.example .env
+# then fill in your values
 ```
+
+`.env` is listed in `.gitignore` and must never be committed. All variables are loaded by `backend/config.py` via `python-dotenv`.
 
 ---
 
