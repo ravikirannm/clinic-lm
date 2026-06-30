@@ -7,7 +7,7 @@ export interface Notebook {
 
 export interface Source {
   id: string
-  type: 'pdf' | 'url' | 'text'
+  type: 'pdf' | 'docx' | 'image' | 'url' | 'text'
   name: string
 }
 
@@ -79,7 +79,7 @@ export interface ClinicalAnalysis {
 }
 
 export interface AddSourceData {
-  type: 'pdf' | 'url' | 'text'
+  type: 'file' | 'url' | 'text'
   files?: File[]
   urls?: string
   text?: string

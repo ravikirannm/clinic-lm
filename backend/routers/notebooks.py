@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from db.mongo import get_db
 from db.postgres import get_conn
-from services.ingestion import extract_pdf, extract_url
+from services.ingestion import extract_file, extract_url, validate_upload
 from services.generation import generate_notebook_content
 from services.clinical_analyzer import ClinicalAnalyzer
 from services.interaction_checker import InteractionChecker
@@ -248,11 +248,15 @@ async def add_sources(
         if not file.filename:
             continue
         file_bytes = await file.read()
-        content = _process(extract_pdf(file_bytes))
+        try:
+            safe_name, file_type = validate_upload(file.filename, file_bytes)
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"error": str(exc)})
+        content = _process(extract_file(file_bytes, file_type))
         new_sources.append({
             "id": str(uuid.uuid4()),
-            "type": "pdf",
-            "name": file.filename,
+            "type": file_type,
+            "name": safe_name,
             "content": content,
         })
 

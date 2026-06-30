@@ -24,7 +24,11 @@ export default function SourcesPanel({ sources, onAddSource, className }: Props)
         {sources.map(src => (
           <div key={src.id} className="source-item">
             <span className="source-item-icon">
-              {src.type === 'pdf' ? '📄' : src.type === 'url' ? '🔗' : '📝'}
+              {src.type === 'pdf' ? '📄'
+                : src.type === 'docx' ? '📝'
+                : src.type === 'image' ? '🖼️'
+                : src.type === 'url' ? '🔗'
+                : '📋'}
             </span>
             <span className="source-item-name" title={src.name}>{src.name}</span>
           </div>

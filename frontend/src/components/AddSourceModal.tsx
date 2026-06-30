@@ -6,32 +6,50 @@ interface Props {
   onSubmit: (data: AddSourceData) => Promise<void>
 }
 
-type Tab = 'pdf' | 'url' | 'text'
+type Tab = 'file' | 'url' | 'text'
+
+const ACCEPTED = '.pdf,.docx,.jpg,.jpeg,.png,.gif,.bmp,.tiff,.tif,.webp'
+const MAX_MB = 20
+
+function fileIcon(file: File): string {
+  if (file.type.startsWith('image/')) return '🖼️'
+  if (file.name.toLowerCase().endsWith('.docx')) return '📝'
+  return '📄'
+}
 
 export default function AddSourceModal({ onClose, onSubmit }: Props) {
-  const [tab, setTab] = useState<Tab>('pdf')
+  const [tab, setTab] = useState<Tab>('file')
   const [urls, setUrls] = useState('')
   const [text, setText] = useState('')
   const [files, setFiles] = useState<File[]>([])
+  const [fileError, setFileError] = useState('')
   const [anonymize, setAnonymize] = useState(false)
   const [loading, setLoading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const canSubmit =
-    tab === 'pdf' ? files.length > 0
+    tab === 'file' ? files.length > 0 && !fileError
     : tab === 'url' ? urls.trim().length > 0
     : text.trim().length > 0
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setFiles(Array.from(e.target.files ?? []))
+    const selected = Array.from(e.target.files ?? [])
+    const oversized = selected.filter(f => f.size > MAX_MB * 1024 * 1024)
+    if (oversized.length > 0) {
+      setFileError(`${oversized.map(f => f.name).join(', ')} exceed${oversized.length === 1 ? 's' : ''} the ${MAX_MB} MB limit`)
+      setFiles([])
+    } else {
+      setFileError('')
+      setFiles(selected)
+    }
   }
 
   async function handleSubmit() {
     if (!canSubmit || loading) return
     setLoading(true)
     try {
-      if (tab === 'pdf') {
-        await onSubmit({ type: 'pdf', files, anonymize })
+      if (tab === 'file') {
+        await onSubmit({ type: 'file', files, anonymize })
       } else if (tab === 'url') {
         await onSubmit({ type: 'url', urls: urls.trim(), anonymize })
       } else {
@@ -53,10 +71,10 @@ export default function AddSourceModal({ onClose, onSubmit }: Props) {
 
         <div className="modal-tabs">
           <button
-            className={`modal-tab ${tab === 'pdf' ? 'active' : ''}`}
-            onClick={() => setTab('pdf')}
+            className={`modal-tab ${tab === 'file' ? 'active' : ''}`}
+            onClick={() => setTab('file')}
           >
-            Upload PDF
+            Upload file
           </button>
           <button
             className={`modal-tab ${tab === 'url' ? 'active' : ''}`}
@@ -73,22 +91,38 @@ export default function AddSourceModal({ onClose, onSubmit }: Props) {
         </div>
 
         <div className="modal-body">
-          {tab === 'pdf' && (
-            <label className="file-drop-zone">
-              <input
-                type="file"
-                accept=".pdf"
-                multiple
-                ref={fileInputRef}
-                onChange={handleFileChange}
-              />
-              <div className="file-drop-zone-icon">📄</div>
-              {files.length === 0 && <span>Click to choose one or more PDFs</span>}
-              {files.length === 1 && <span style={{ color: 'var(--text)' }}>{files[0].name}</span>}
-              {files.length > 1 && (
-                <span style={{ color: 'var(--text)' }}>{files.length} files selected</span>
+          {tab === 'file' && (
+            <>
+              <label className="file-drop-zone">
+                <input
+                  type="file"
+                  accept={ACCEPTED}
+                  multiple
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                />
+                <div className="file-drop-zone-icon">
+                  {files.length === 1 ? fileIcon(files[0]) : '📂'}
+                </div>
+                {files.length === 0 && (
+                  <span>Click to choose one or more files</span>
+                )}
+                {files.length === 1 && (
+                  <span style={{ color: 'var(--text)' }}>{files[0].name}</span>
+                )}
+                {files.length > 1 && (
+                  <span style={{ color: 'var(--text)' }}>{files.length} files selected</span>
+                )}
+              </label>
+              <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
+                Accepted: PDF, DOCX, JPG, PNG, GIF, BMP, TIFF, WebP · Max {MAX_MB} MB per file
+              </p>
+              {fileError && (
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--error, #d32f2f)' }}>
+                  {fileError}
+                </p>
               )}
-            </label>
+            </>
           )}
 
           {tab === 'url' && (

@@ -36,7 +36,7 @@ export default function NotebookPage() {
     setAddingSource(true)
     try {
       const form = new FormData()
-      if (data.type === 'pdf' && data.files) {
+      if (data.type === 'file' && data.files) {
         for (const f of data.files) form.append('files', f)
       }
       if (data.type === 'url' && data.urls) form.append('urls', data.urls)
