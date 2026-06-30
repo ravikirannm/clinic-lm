@@ -152,15 +152,20 @@ export default function AddSourceModal({ onClose, onSubmit }: Props) {
           Select "De-identify PII/PHI" to automatically redact names, dates, addresses, and other personal identifiers from the source before saving. This may add processing time.
         </div>
 
-        <div className="modal-footer">
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-muted)', marginRight: 'auto', whiteSpace: 'nowrap', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={anonymize}
-              onChange={e => setAnonymize(e.target.checked)}
-            />
-            De-identify PII/PHI
-          </label>
+        <div className="modal-footer" >
+          <div style={{display: 'flex', alignItems: 'center'}}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 0, fontSize: 13, color: 'var(--text-muted)', justifyContent:'start',  whiteSpace: 'nowrap', cursor: 'pointer', width: 'fit-content' }}>
+                <span>
+                  <input style={{marginRight:0}}
+                  type="checkbox"
+                  checked={anonymize}
+                  onChange={e => setAnonymize(e.target.checked)}
+                />
+                </span>
+                <span>De-identify PII/PHI</span>
+              </label>
+          </div>
+          
           <button className="btn-ghost" onClick={onClose} disabled={loading}>Cancel</button>
           <button className="btn-primary" onClick={handleSubmit} disabled={!canSubmit || loading}>
             {loading ? 'Processing…' : 'Add source'}
