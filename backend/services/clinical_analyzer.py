@@ -1,5 +1,6 @@
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import ollama
 
@@ -40,35 +41,41 @@ class ClinicalAnalyzer:
         else:
             keywords = []
 
-        # ── Step 2: RAG retrieval ─────────────────────────────────────────────
+        # ── Steps 2+3: RAG retrievals and PubMed query generation in parallel ──
+        # All three tasks only need `keywords` and `text` from Step 1; they are
+        # independent of each other so we run them concurrently.
         retrieved_docs: list = []
-        if _rag_retriever is not None and keywords:
-            try:
-                retrieved_docs = _rag_retriever.retrieve(keywords)
-            except Exception as e:
-                logger.warning("RAG retrieval failed: %s", e)
-
         notebook_chunks: list = []
-        if notebook_id and keywords:
-            try:
-                notebook_chunks = NotebookRAG.retrieve(notebook_id, " ".join(keywords))
-            except Exception as e:
-                logger.warning("NotebookRAG retrieval failed: %s", e)
+        medical_corpus_input = None
+        api_inputs: dict = {}
 
-        # ── Step 3: generate PubMed search queries ────────────────────────────
-        system_prompt_pass_2 = (
-            "You are a medical search query specialist. "
-            "Your ONLY job is to generate optimized search queries for PubMed."
-        )
-        user_prompt_pass_2 = f"""
+        def _fetch_medical_rag():
+            if _rag_retriever is not None and keywords:
+                try:
+                    return _rag_retriever.retrieve(keywords)
+                except Exception as e:
+                    logger.warning("RAG retrieval failed: %s", e)
+            return []
+
+        def _fetch_notebook_rag():
+            if notebook_id and keywords:
+                try:
+                    return NotebookRAG.retrieve(notebook_id, " ".join(keywords))
+                except Exception as e:
+                    logger.warning("NotebookRAG retrieval failed: %s", e)
+            return []
+
+        def _generate_pubmed_queries():
+            system_prompt_pass_2 = (
+                "You are a medical search query specialist. "
+                "Your ONLY job is to generate optimized search queries for PubMed."
+            )
+            user_prompt_pass_2 = f"""
             === MEDICAL CONTEXT ===
             {text}
 
             === EXTRACTED KEYWORDS ===
             {json.dumps(keywords, indent=1)}
-
-            === Extracted Medical Documents ===
-            {json.dumps(retrieved_docs, indent=1)}
 
             === YOUR TASK ===
             Generate search queries in strict JSON only. No explanation. No preamble. No markdown.
@@ -86,18 +93,26 @@ class ClinicalAnalyzer:
             - PubMed must use MeSH terms where possible e.g. [MeSH Terms]
             - Do not diagnose, only generate search queries
             """
-        response = self.client.chat(
-            model=OLLAMA_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt_pass_2},
-                {"role": "user", "content": user_prompt_pass_2},
-            ],
-            format=PubMedSearchRequest.model_json_schema(),
-            options={"temperature": 0.2},
-        )
-        medical_corpus_input = PubMedSearchRequest.model_validate_json(
-            response["message"]["content"]
-        )
+            resp = self.client.chat(
+                model=OLLAMA_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt_pass_2},
+                    {"role": "user", "content": user_prompt_pass_2},
+                ],
+                format=PubMedSearchRequest.model_json_schema(),
+                options={"temperature": 0.2},
+            )
+            return PubMedSearchRequest.model_validate_json(resp["message"]["content"])
+
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            fut_medical = pool.submit(_fetch_medical_rag)
+            fut_notebook = pool.submit(_fetch_notebook_rag)
+            fut_queries = pool.submit(_generate_pubmed_queries)
+
+            retrieved_docs = fut_medical.result()
+            notebook_chunks = fut_notebook.result()
+            medical_corpus_input = fut_queries.result()
+
         step_query_conf = max(0.0, min(1.0, medical_corpus_input.confidence))
         api_inputs = medical_corpus_input.model_dump()
         logger.info("Generated search queries: %s", api_inputs)

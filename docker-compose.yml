@@ -20,14 +20,13 @@ services:
     build: ./backend
     ports:
       - "8000:8000"
-    # Uncomment to enable GPU access:
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     volumes:
       - ./backend:/app
       - medcpt_db:/app/medcpt_db

@@ -9,8 +9,8 @@ from transformers import AutoTokenizer, AutoModel
 
 logger = logging.getLogger(__name__)
 
-_CHUNK_SIZE = 800
-_CHUNK_OVERLAP = 100
+_CHUNK_SIZE = 1200
+_CHUNK_OVERLAP = 200
 
 
 def _chunk_text(text: str) -> list[str]:
@@ -34,6 +34,7 @@ class NotebookRAG:
     _lock = threading.Lock()
     _tokenizer = None
     _model = None
+    _device: str = "cpu"
     _chroma: chromadb.PersistentClient | None = None
 
     @classmethod
@@ -43,10 +44,13 @@ class NotebookRAG:
         with cls._lock:
             if cls._model is not None:
                 return
+            from config import TORCH_DEVICE
             logger.info("NotebookRAG: loading MedCPT-Query-Encoder…")
+            cls._device = TORCH_DEVICE
             cls._tokenizer = AutoTokenizer.from_pretrained("ncbi/MedCPT-Query-Encoder")
-            cls._model = AutoModel.from_pretrained("ncbi/MedCPT-Query-Encoder").to("cpu")
+            cls._model = AutoModel.from_pretrained("ncbi/MedCPT-Query-Encoder").to(cls._device)
             cls._model.eval()
+            logger.info("NotebookRAG: using device=%s", cls._device)
             cls._chroma = chromadb.PersistentClient(path="./notebook_rag_db")
             logger.info("NotebookRAG: ready")
 
@@ -66,11 +70,11 @@ class NotebookRAG:
             truncation=True,
             return_tensors="pt",
             max_length=512,
-        ).to("cpu")
-        with torch.no_grad():
+        ).to(cls._device)
+        with torch.no_grad(), torch.amp.autocast(cls._device, enabled=cls._device == "cuda"):
             out = cls._model(**inputs)
             emb = out.last_hidden_state[:, 0, :]
-        return emb.cpu().numpy().tolist()[0]
+        return emb.cpu().float().numpy().tolist()[0]
 
     @classmethod
     def index_source(
@@ -118,7 +122,7 @@ class NotebookRAG:
         cls,
         notebook_id: str,
         query: str,
-        top_k: int = 5,
+        top_k: int = 8,
     ) -> list[dict]:
         """Return the top-k most relevant chunks from this notebook's sources."""
         try:

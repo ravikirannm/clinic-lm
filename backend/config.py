@@ -19,6 +19,18 @@ MONGODB_URI = os.getenv(
 OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'http://host.docker.internal:11434')
 OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'qwen2.5:7b')
 
+def _resolve_device() -> str:
+    """Return 'cpu' if TORCH_DEVICE=cpu, otherwise auto-detect CUDA."""
+    if os.getenv("TORCH_DEVICE", "").lower() == "cpu":
+        return "cpu"
+    try:
+        import torch
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    except ImportError:
+        return "cpu"
+
+TORCH_DEVICE: str = _resolve_device()
+
 BIO_EMAIL = os.getenv("BIO_EMAIL", "")
 
 ICD11_CLIENT_ID = os.getenv("ICD11_CLIENT_ID", "")

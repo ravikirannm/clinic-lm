@@ -1,4 +1,5 @@
-FROM pytorch/pytorch:2.4.0-cuda12.4-cudnn9-runtime
+FROM pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime
+# FROM nvcr.io/nvidia/pytorch:24.07-py3
 
 # Install system dependencies for Tesseract and OCR
 RUN apt-get update && apt-get install -y --no-install-recommends \
