@@ -75,8 +75,13 @@ class GuidelinesConformance:
     def __init__(self):
         self.client = ollama.Client(host=OLLAMA_BASE_URL)
 
-    def analyze(self, notebook_id: str, text: str) -> dict:
+    def analyze(self, notebook_id: str, text: str, on_progress=None) -> dict:
+        def _progress(step: str, pct: int):
+            if on_progress:
+                on_progress(step, pct)
+
         # ── Step 1: keyword extraction ────────────────────────────────────────
+        _progress("Extracting clinical keywords…", 10)
         keywords: list[str] = []
         if _extract_keywords is not None:
             try:
@@ -85,6 +90,7 @@ class GuidelinesConformance:
                 logger.warning("Keyword extraction failed: %s", e)
 
         # ── Step 2: RAG retrieval ─────────────────────────────────────────────
+        _progress("Retrieving medical knowledge base…", 25)
         retrieved_docs: list = []
         if _rag_retriever is not None and keywords:
             try:
@@ -100,6 +106,7 @@ class GuidelinesConformance:
                 logger.warning("NotebookRAG retrieval failed: %s", e)
 
         # ── Step 3: LLM generates guideline-optimised PubMed queries ─────────
+        _progress("Generating guideline search queries…", 42)
         query_prompt = f"""
 === MEDICAL CONTEXT ===
 {text}
@@ -148,6 +155,7 @@ or evidence-based recommendations.
         logger.info("Guidelines search queries: %s", api_inputs)
 
         # ── Step 4: Parallel fetch from all four guideline sources ───────────
+        _progress("Fetching clinical guidelines…", 58)
         pubmed_query = api_inputs.get("pubmed", {})
         nlm_query    = " ".join(keywords[:4])
         books_query  = " ".join(keywords[:3]) + " clinical practice guideline"
@@ -183,6 +191,7 @@ or evidence-based recommendations.
             }
 
         # ── Step 5: LLM conformance analysis ─────────────────────────────────
+        _progress("Analysing guideline conformance…", 78)
         user_prompt = f"""
 === PATIENT DOCUMENTATION ===
 {text}

@@ -26,8 +26,13 @@ class InteractionChecker:
     def __init__(self):
         self.client = ollama.Client(host=OLLAMA_BASE_URL)
 
-    def interaction_check(self, text: str, notebook_id: str = "") -> dict:
+    def interaction_check(self, text: str, notebook_id: str = "", on_progress=None) -> dict:
+        def _progress(step: str, pct: int):
+            if on_progress:
+                on_progress(step, pct)
+
         # ── Notebook RAG: fetch patient-specific context ──────────────────────
+        _progress("Retrieving patient context…", 8)
         notebook_chunks: list = []
         if notebook_id:
             try:
@@ -36,6 +41,7 @@ class InteractionChecker:
                 logger.warning("NotebookRAG retrieval failed: %s", e)
 
         # ── Step A: Extract drug name strings from text ───────────────────────
+        _progress("Extracting drug names…", 18)
         step_a_system_prompt = """
             You are a drug name extractor.
 
@@ -64,6 +70,7 @@ class InteractionChecker:
         drug_names = drug_list_obj.items
 
         # ── Step B: Web search per drug name (no LLM, raw context only) ──────
+        _progress("Searching drug databases…", 30)
         brand_molecule_map: dict[str, str] = {}
         for item in drug_names:
             content = search_tool(f"Molecule present in the medical drug {item}")
@@ -73,6 +80,7 @@ class InteractionChecker:
         text = text + "\n\nDrug web search context:\n" + json.dumps(brand_molecule_map, indent=1)
 
         # ── Step C: Full structured drug extraction with candidate names ──────
+        _progress("Identifying molecular structures…", 42)
         step_c_system_prompt = f"""
             You are a clinical pharmacology language formatter. Your only job is to:
             1. Extract all drug and substance names from natural language input.
@@ -123,6 +131,7 @@ class InteractionChecker:
         logger.info("Drug extraction result: %s", drug_extraction_result)
 
         # ── RxNorm verification ───────────────────────────────────────────────
+        _progress("Verifying drug identities via RxNorm…", 55)
         pseudoscience_flags: list = []
         verified_drugs: list = []
 
@@ -160,6 +169,7 @@ class InteractionChecker:
         logger.info("Resolved RxCUIs: %s", drug_rxcui_map)
 
         # ── Process all drug pairs concurrently ───────────────────────────────
+        _progress("Checking drug pair interactions…", 65)
         drugs_list = list(drug_rxcui_map.keys())
         drug_pairs = list(combinations(drugs_list, 2))
 
@@ -262,6 +272,7 @@ class InteractionChecker:
             )
 
         # ── PubMed + PICO per pair ────────────────────────────────────────────
+        _progress("Fetching clinical evidence from PubMed…", 78)
         for pair in interaction_results:
             drug1 = pair["drug1"]
             drug2 = pair["drug2"]
@@ -374,6 +385,7 @@ class InteractionChecker:
         }
 
         # ── Synthesis: human-readable summary ─────────────────────────────────
+        _progress("Synthesising interaction findings…", 92)
         chat_prompt = f"""
             You are an expert clinical pharmacology assistant.
             You have gathered comprehensive drug interaction data from multiple authoritative sources.

@@ -34,14 +34,20 @@ class ClinicalAnalyzer:
     def __init__(self):
         self.client = ollama.Client(host=OLLAMA_BASE_URL)
 
-    def analyze(self, user_id: str, notebook_id: str, text: str) -> dict:
+    def analyze(self, user_id: str, notebook_id: str, text: str, on_progress=None) -> dict:
+        def _progress(step: str, pct: int):
+            if on_progress:
+                on_progress(step, pct)
+
         # ── Step 1: keyword extraction ────────────────────────────────────────
+        _progress("Extracting clinical keywords…", 10)
         if _extract_keywords is not None:
             keywords = _extract_keywords.get_clinical_ner_results(text)
         else:
             keywords = []
 
         # ── Steps 2+3: RAG retrievals and PubMed query generation in parallel ──
+        _progress("Retrieving medical knowledge base…", 25)
         # All three tasks only need `keywords` and `text` from Step 1; they are
         # independent of each other so we run them concurrently.
         retrieved_docs: list = []
@@ -118,9 +124,11 @@ class ClinicalAnalyzer:
         logger.info("Generated search queries: %s", api_inputs)
 
         # ── Step 4: PubMed fetch ──────────────────────────────────────────────
+        _progress("Fetching PubMed evidence…", 45)
         pubmed_results = _pubmed_client.fetch_pubmed(api_inputs.get("pubmed", {}))
 
         # ── Step 5: clinical assessment ───────────────────────────────────────
+        _progress("Performing clinical assessment…", 62)
         system_prompt_pass_3 = """
 You are an expert clinical diagnostic assistant performing a structured Bayesian differential diagnosis.
 You will be given comprehensive medical information gathered from multiple authoritative sources.
@@ -213,6 +221,7 @@ next_best_discriminator must reference the actual top differentials you identifi
         }
 
         # ── Step 6: human-readable summary ───────────────────────────────────
+        _progress("Generating clinical summary…", 88)
         chat_prompt = f"""
 You are an expert clinical diagnostic assistant. You will be given a comprehensive medical analysis
 result that already encodes Bayesian reasoning (priors, posteriors, supporting and refuting evidence).

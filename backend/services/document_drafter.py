@@ -129,11 +129,27 @@ class DocumentDrafter:
             "generated_at":        datetime.now(timezone.utc).isoformat(),
         }
 
-    def draft_all(self, notebook_id: str, text: str) -> dict:
+    def draft_all(self, notebook_id: str, text: str, on_progress=None) -> dict:
         """Generate all three document types in parallel and return as a map."""
+        def _progress(step: str, pct: int):
+            if on_progress:
+                on_progress(step, pct)
+
+        _progress("Starting document generation…", 10)
+        results: dict = {}
+        labels = list(DOCUMENT_TYPES.keys())
+        total = len(labels)
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
             futures = {
-                doc_type: ex.submit(self.draft, notebook_id, text, doc_type)
-                for doc_type in DOCUMENT_TYPES
+                ex.submit(self.draft, notebook_id, text, doc_type): doc_type
+                for doc_type in labels
             }
-        return {doc_type: future.result() for doc_type, future in futures.items()}
+            for i, future in enumerate(concurrent.futures.as_completed(futures), start=1):
+                doc_type = futures[future]
+                results[doc_type] = future.result()
+                label = DOCUMENT_TYPES[doc_type]
+                pct = int(10 + (i / total) * 85)
+                _progress(f"Drafted {label}…", pct)
+
+        return results

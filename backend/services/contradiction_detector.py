@@ -173,8 +173,13 @@ class ContradictionDetector:
     def __init__(self):
         self.client = ollama.Client(host=OLLAMA_BASE_URL)
 
-    def analyze(self, notebook_id: str, text: str) -> dict:
+    def analyze(self, notebook_id: str, text: str, on_progress=None) -> dict:
+        def _progress(step: str, pct: int):
+            if on_progress:
+                on_progress(step, pct)
+
         # ── Step 1: NER keyword extraction ────────────────────────────────────
+        _progress("Extracting clinical keywords…", 12)
         keywords: list[str] = []
         if _extract_keywords is not None:
             try:
@@ -183,6 +188,7 @@ class ContradictionDetector:
                 logger.warning("Keyword extraction failed: %s", e)
 
         # ── Step 2: RAG retrieval from notebook ────────────────────────────────
+        _progress("Retrieving document context…", 35)
         notebook_chunks = _retrieve_multi_topic(notebook_id, keywords, top_k=10)
         grouped = _group_by_source(notebook_chunks)
         uploaded_names = [g["source"] for g in grouped]
@@ -222,6 +228,7 @@ Place every finding in `intra_document` or `source_vs_source`. Return only valid
 """
 
         # ── Step 3: LLM analysis ───────────────────────────────────────────────
+        _progress("Detecting contradictions…", 62)
         try:
             resp = self.client.chat(
                 model=OLLAMA_MODEL,
@@ -240,6 +247,7 @@ Place every finding in `intra_document` or `source_vs_source`. Return only valid
             report = ContradictionReport(overall_assessment="Analysis failed — LLM error.")
 
         # ── Step 4: Validate, normalise severity, tag with type ────────────────
+        _progress("Validating findings…", 90)
         valid_sources = set(uploaded_names)
         _SEV = {"high": "high", "medium": "medium", "moderate": "medium", "low": "low"}
 

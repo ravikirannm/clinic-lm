@@ -384,11 +384,17 @@ class RiskAnalyzer:
             logger.error("LLM extraction failed for %s: %s", label, e)
             return {"scoring_system": label, "parameters_extracted": [], "missing_parameters": []}
 
-    def analyze(self, notebook_id: str, text: str) -> dict:
+    def analyze(self, notebook_id: str, text: str, on_progress=None) -> dict:
+        def _progress(step: str, pct: int):
+            if on_progress:
+                on_progress(step, pct)
+
         # Step 1: keyword extraction
+        _progress("Extracting clinical keywords…", 10)
         keywords = _extract_keywords.get_clinical_ner_results(text) if _extract_keywords else []
 
         # Step 2: notebook RAG
+        _progress("Retrieving patient context…", 30)
         notebook_chunks: list = []
         if notebook_id and keywords:
             try:
@@ -399,6 +405,7 @@ class RiskAnalyzer:
         context = json.dumps(notebook_chunks, indent=1) if notebook_chunks else "(none)"
 
         # Step 3: parallel LLM extraction for all 4 scoring systems
+        _progress("Extracting risk score parameters…", 50)
         with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
             f_wells = ex.submit(self._extract, _SYS_WELLS, _wells_user(context, text), "Wells DVT")
             f_cha2 = ex.submit(self._extract, _SYS_CHA2DS2, _cha2ds2_user(context, text), "CHA2DS2-VASc")
@@ -414,6 +421,7 @@ class RiskAnalyzer:
                     len(wells_raw), len(cha2_raw), len(qsofa_raw), len(meld_raw))
 
         # Step 4: deterministic score calculation
+        _progress("Calculating risk scores…", 88)
         return {
             "keywords": keywords,
             "scores": {

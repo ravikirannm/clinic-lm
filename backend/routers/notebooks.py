@@ -1,6 +1,9 @@
+import asyncio
+import json
+import threading
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Callable, Optional
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -16,6 +19,49 @@ from services.literature_review import LiteratureReviewService
 from services.notebook_rag import NotebookRAG
 
 router = APIRouter(prefix="/notebooks")
+
+
+# ── SSE streaming helper ──────────────────────────────────────────────────────
+
+def _sse(obj: dict) -> str:
+    return f"data: {json.dumps(obj)}\n\n"
+
+
+async def _stream_tool(task_fn: Callable):
+    """
+    Runs `task_fn(on_progress)` in a daemon thread, yielding SSE events.
+    `task_fn` receives a single arg: on_progress(step: str, pct: int).
+    Yields progress events during execution, then a result or error event.
+    """
+    loop = asyncio.get_event_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+    result_holder: dict = {}
+
+    def on_progress(step: str, pct: int) -> None:
+        loop.call_soon_threadsafe(
+            queue.put_nowait,
+            _sse({"type": "progress", "step": step, "progress": pct}),
+        )
+
+    def run() -> None:
+        try:
+            result_holder["data"] = task_fn(on_progress)
+        except Exception as exc:
+            result_holder["error"] = str(exc)
+        loop.call_soon_threadsafe(queue.put_nowait, None)  # sentinel
+
+    threading.Thread(target=run, daemon=True).start()
+
+    while True:
+        msg = await queue.get()
+        if msg is None:
+            break
+        yield msg
+
+    if "error" in result_holder:
+        yield _sse({"type": "error", "message": result_holder["error"]})
+    else:
+        yield _sse({"type": "result", "data": result_holder["data"]})
 
 
 def _user_id(request: Request) -> str:
@@ -288,7 +334,7 @@ async def add_sources(
 # ── Clinical analysis ─────────────────────────────────────────────────────────
 
 @router.post("/{notebook_id}/analyze")
-def analyze_notebook(notebook_id: str, request: Request):
+async def analyze_notebook(notebook_id: str, request: Request):
     uid = _user_id(request)
     doc = get_db().notebook_content.find_one({"notebook_id": notebook_id, "user_id": uid})
     if not doc:
@@ -299,14 +345,21 @@ def analyze_notebook(notebook_id: str, request: Request):
         return JSONResponse(status_code=400, content={"error": "No documentation generated yet. Add sources first."})
 
     analyzer = ClinicalAnalyzer()
-    result = analyzer.analyze(uid, notebook_id, documentation)
+    db = get_db()
 
-    get_db().notebook_content.update_one(
-        {"notebook_id": notebook_id},
-        {"$set": {"clinical_analysis": result, "updated_at": _now()}},
+    def task(on_progress):
+        result = analyzer.analyze(uid, notebook_id, documentation, on_progress=on_progress)
+        db.notebook_content.update_one(
+            {"notebook_id": notebook_id},
+            {"$set": {"clinical_analysis": result, "updated_at": _now()}},
+        )
+        return result
+
+    return StreamingResponse(
+        _stream_tool(task),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
     )
-
-    return result
 
 
 @router.get("/{notebook_id}/analysis")
@@ -321,7 +374,7 @@ def get_analysis(notebook_id: str, request: Request):
 # ── Drug interaction checker ──────────────────────────────────────────────────
 
 @router.post("/{notebook_id}/interactions")
-def check_interactions(notebook_id: str, request: Request):
+async def check_interactions(notebook_id: str, request: Request):
     uid = _user_id(request)
     doc = get_db().notebook_content.find_one({"notebook_id": notebook_id, "user_id": uid})
     if not doc:
@@ -335,14 +388,21 @@ def check_interactions(notebook_id: str, request: Request):
         )
 
     checker = InteractionChecker()
-    result = checker.interaction_check(documentation, notebook_id)
+    db = get_db()
 
-    get_db().notebook_content.update_one(
-        {"notebook_id": notebook_id},
-        {"$set": {"drug_interactions": result, "updated_at": _now()}},
+    def task(on_progress):
+        result = checker.interaction_check(documentation, notebook_id, on_progress=on_progress)
+        db.notebook_content.update_one(
+            {"notebook_id": notebook_id},
+            {"$set": {"drug_interactions": result, "updated_at": _now()}},
+        )
+        return result
+
+    return StreamingResponse(
+        _stream_tool(task),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
     )
-
-    return result
 
 
 @router.get("/{notebook_id}/interactions")
@@ -357,7 +417,7 @@ def get_interactions(notebook_id: str, request: Request):
 # ── ICD-11 tree ───────────────────────────────────────────────────────────────
 
 @router.post("/{notebook_id}/icd11")
-def run_icd11(notebook_id: str, request: Request):
+async def run_icd11(notebook_id: str, request: Request):
     uid = _user_id(request)
     doc = get_db().notebook_content.find_one({"notebook_id": notebook_id, "user_id": uid})
     if not doc:
@@ -371,13 +431,21 @@ def run_icd11(notebook_id: str, request: Request):
         )
 
     service = ICD11TreeService()
-    result = service.generate_icd11_tree(documentation, notebook_id)
+    db = get_db()
 
-    get_db().notebook_content.update_one(
-        {"notebook_id": notebook_id},
-        {"$set": {"icd11": result, "updated_at": _now()}},
+    def task(on_progress):
+        result = service.generate_icd11_tree(documentation, notebook_id, on_progress=on_progress)
+        db.notebook_content.update_one(
+            {"notebook_id": notebook_id},
+            {"$set": {"icd11": result, "updated_at": _now()}},
+        )
+        return result
+
+    return StreamingResponse(
+        _stream_tool(task),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
     )
-    return result
 
 
 @router.get("/{notebook_id}/icd11")
@@ -392,7 +460,7 @@ def get_icd11(notebook_id: str, request: Request):
 # ── Literature review ─────────────────────────────────────────────────────────
 
 @router.post("/{notebook_id}/literature")
-def run_literature(notebook_id: str, request: Request):
+async def run_literature(notebook_id: str, request: Request):
     uid = _user_id(request)
     doc = get_db().notebook_content.find_one({"notebook_id": notebook_id, "user_id": uid})
     if not doc:
@@ -406,13 +474,21 @@ def run_literature(notebook_id: str, request: Request):
         )
 
     service = LiteratureReviewService()
-    result = service.analyze(uid, notebook_id, documentation)
+    db = get_db()
 
-    get_db().notebook_content.update_one(
-        {"notebook_id": notebook_id},
-        {"$set": {"literature": result, "updated_at": _now()}},
+    def task(on_progress):
+        result = service.analyze(uid, notebook_id, documentation, on_progress=on_progress)
+        db.notebook_content.update_one(
+            {"notebook_id": notebook_id},
+            {"$set": {"literature": result, "updated_at": _now()}},
+        )
+        return result
+
+    return StreamingResponse(
+        _stream_tool(task),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
     )
-    return result
 
 
 @router.get("/{notebook_id}/literature")
@@ -427,7 +503,7 @@ def get_literature(notebook_id: str, request: Request):
 # ── Risk analysis ─────────────────────────────────────────────────────────────
 
 @router.post("/{notebook_id}/risk")
-def run_risk(notebook_id: str, request: Request):
+async def run_risk(notebook_id: str, request: Request):
     uid = _user_id(request)
     doc = get_db().notebook_content.find_one({"notebook_id": notebook_id, "user_id": uid})
     if not doc:
@@ -441,13 +517,22 @@ def run_risk(notebook_id: str, request: Request):
         )
 
     from services.risk_analyser import RiskAnalyzer
-    result = RiskAnalyzer().analyze(notebook_id, documentation)
+    analyzer = RiskAnalyzer()
+    db = get_db()
 
-    get_db().notebook_content.update_one(
-        {"notebook_id": notebook_id},
-        {"$set": {"risk": result, "updated_at": _now()}},
+    def task(on_progress):
+        result = analyzer.analyze(notebook_id, documentation, on_progress=on_progress)
+        db.notebook_content.update_one(
+            {"notebook_id": notebook_id},
+            {"$set": {"risk": result, "updated_at": _now()}},
+        )
+        return result
+
+    return StreamingResponse(
+        _stream_tool(task),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
     )
-    return result
 
 
 @router.get("/{notebook_id}/risk")
@@ -462,7 +547,7 @@ def get_risk(notebook_id: str, request: Request):
 # ── Rare disease finder ───────────────────────────────────────────────────────
 
 @router.post("/{notebook_id}/rare-diseases")
-def run_rare_diseases(notebook_id: str, request: Request):
+async def run_rare_diseases(notebook_id: str, request: Request):
     uid = _user_id(request)
     doc = get_db().notebook_content.find_one({"notebook_id": notebook_id, "user_id": uid})
     if not doc:
@@ -476,13 +561,22 @@ def run_rare_diseases(notebook_id: str, request: Request):
         )
 
     from services.rare_disease import RareDiseaseService
-    result = RareDiseaseService().analyze(notebook_id, documentation)
+    service = RareDiseaseService()
+    db = get_db()
 
-    get_db().notebook_content.update_one(
-        {"notebook_id": notebook_id},
-        {"$set": {"rare_diseases": result, "updated_at": _now()}},
+    def task(on_progress):
+        result = service.analyze(notebook_id, documentation, on_progress=on_progress)
+        db.notebook_content.update_one(
+            {"notebook_id": notebook_id},
+            {"$set": {"rare_diseases": result, "updated_at": _now()}},
+        )
+        return result
+
+    return StreamingResponse(
+        _stream_tool(task),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
     )
-    return result
 
 
 @router.get("/{notebook_id}/rare-diseases")
@@ -497,7 +591,7 @@ def get_rare_diseases(notebook_id: str, request: Request):
 # ── Contradiction detector ────────────────────────────────────────────────────
 
 @router.post("/{notebook_id}/contradictions")
-def run_contradictions(notebook_id: str, request: Request):
+async def run_contradictions(notebook_id: str, request: Request):
     uid = _user_id(request)
     doc = get_db().notebook_content.find_one({"notebook_id": notebook_id, "user_id": uid})
     if not doc:
@@ -511,13 +605,22 @@ def run_contradictions(notebook_id: str, request: Request):
         )
 
     from services.contradiction_detector import ContradictionDetector
-    result = ContradictionDetector().analyze(notebook_id, documentation)
+    detector = ContradictionDetector()
+    db = get_db()
 
-    get_db().notebook_content.update_one(
-        {"notebook_id": notebook_id},
-        {"$set": {"contradictions": result, "updated_at": _now()}},
+    def task(on_progress):
+        result = detector.analyze(notebook_id, documentation, on_progress=on_progress)
+        db.notebook_content.update_one(
+            {"notebook_id": notebook_id},
+            {"$set": {"contradictions": result, "updated_at": _now()}},
+        )
+        return result
+
+    return StreamingResponse(
+        _stream_tool(task),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
     )
-    return result
 
 
 @router.get("/{notebook_id}/contradictions")
@@ -532,7 +635,7 @@ def get_contradictions(notebook_id: str, request: Request):
 # ── Guidelines conformance ────────────────────────────────────────────────────
 
 @router.post("/{notebook_id}/guidelines")
-def run_guidelines(notebook_id: str, request: Request):
+async def run_guidelines(notebook_id: str, request: Request):
     uid = _user_id(request)
     doc = get_db().notebook_content.find_one({"notebook_id": notebook_id, "user_id": uid})
     if not doc:
@@ -546,13 +649,22 @@ def run_guidelines(notebook_id: str, request: Request):
         )
 
     from services.guidelines_conformance import GuidelinesConformance
-    result = GuidelinesConformance().analyze(notebook_id, documentation)
+    service = GuidelinesConformance()
+    db = get_db()
 
-    get_db().notebook_content.update_one(
-        {"notebook_id": notebook_id},
-        {"$set": {"guidelines": result, "updated_at": _now()}},
+    def task(on_progress):
+        result = service.analyze(notebook_id, documentation, on_progress=on_progress)
+        db.notebook_content.update_one(
+            {"notebook_id": notebook_id},
+            {"$set": {"guidelines": result, "updated_at": _now()}},
+        )
+        return result
+
+    return StreamingResponse(
+        _stream_tool(task),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
     )
-    return result
 
 
 @router.get("/{notebook_id}/guidelines")
@@ -572,7 +684,7 @@ from services.data_model import ChatRequest, SaveHistoryBody
 # ── Document drafter ──────────────────────────────────────────────────────────
 
 @router.post("/{notebook_id}/draft")
-def run_draft(notebook_id: str, request: Request):
+async def run_draft(notebook_id: str, request: Request):
     uid = _user_id(request)
     doc = get_db().notebook_content.find_one({"notebook_id": notebook_id, "user_id": uid})
     if not doc:
@@ -586,13 +698,22 @@ def run_draft(notebook_id: str, request: Request):
         )
 
     from services.document_drafter import DocumentDrafter
-    result = DocumentDrafter().draft_all(notebook_id, documentation)
+    drafter = DocumentDrafter()
+    db = get_db()
 
-    get_db().notebook_content.update_one(
-        {"notebook_id": notebook_id},
-        {"$set": {"drafts": result, "updated_at": _now()}},
+    def task(on_progress):
+        result = drafter.draft_all(notebook_id, documentation, on_progress=on_progress)
+        db.notebook_content.update_one(
+            {"notebook_id": notebook_id},
+            {"$set": {"drafts": result, "updated_at": _now()}},
+        )
+        return result
+
+    return StreamingResponse(
+        _stream_tool(task),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
     )
-    return result
 
 
 @router.get("/{notebook_id}/draft")

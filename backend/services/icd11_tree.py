@@ -32,11 +32,17 @@ class ICD11TreeService:
     def __init__(self):
         self.client = ollama.Client(host=OLLAMA_BASE_URL)
 
-    def generate_icd11_tree(self, text: str, notebook_id: str = "") -> dict:
+    def generate_icd11_tree(self, text: str, notebook_id: str = "", on_progress=None) -> dict:
+        def _progress(step: str, pct: int):
+            if on_progress:
+                on_progress(step, pct)
+
         # ── Step 1: keyword extraction ────────────────────────────────────────
+        _progress("Extracting clinical keywords…", 10)
         keywords = _extract_keywords.get_clinical_ner_results(text) if _extract_keywords else []
 
         # ── Step 2: RAG retrieval ─────────────────────────────────────────────
+        _progress("Retrieving medical knowledge base…", 28)
         retrieved_docs: list = []
         if _rag_retriever is not None and keywords:
             try:
@@ -52,6 +58,7 @@ class ICD11TreeService:
                 logger.warning("NotebookRAG retrieval failed: %s", e)
 
         # ── Step 3: LLM generates ICD-11 search terms ────────────────────────
+        _progress("Generating ICD-11 search terms…", 48)
         system_prompt = (
             "You are a medical coding specialist. "
             "Your ONLY job is to generate ICD-11 disease name search terms."
@@ -102,10 +109,12 @@ class ICD11TreeService:
         logger.info("ICD-11 search terms: %s", search_terms)
 
         # ── Step 4: ICD-11 search via NLM ────────────────────────────────────
+        _progress("Fetching ICD-11 codes…", 65)
         icd11_results = _icd11_client.fetch_icd11(search_terms)
         logger.info("ICD-11 results: %d matches", len(icd11_results))
 
         # ── Step 5: Build WHO trees in parallel ───────────────────────────────
+        _progress("Building diagnostic tree…", 82)
         def _build(item: dict) -> dict | None:
             try:
                 return _icd11_client.build_tree(item["code"], item.get("title", ""))

@@ -27,8 +27,13 @@ class RareDiseaseService:
     def __init__(self):
         self.client = ollama.Client(host=OLLAMA_BASE_URL)
 
-    def analyze(self, notebook_id: str, text: str) -> dict:
+    def analyze(self, notebook_id: str, text: str, on_progress=None) -> dict:
+        def _progress(step: str, pct: int):
+            if on_progress:
+                on_progress(step, pct)
+
         # ── Step 1: notebook RAG for additional context ───────────────────────
+        _progress("Retrieving patient context…", 12)
         notebook_chunks: list = []
         if notebook_id:
             try:
@@ -39,6 +44,7 @@ class RareDiseaseService:
         context_block = "\n".join(c["content"] for c in notebook_chunks) if notebook_chunks else ""
 
         # ── Step 2: LLM extracts specific symptom terms ───────────────────────
+        _progress("Extracting clinical symptoms…", 30)
         user_prompt = (
             f"=== CLINICAL NOTE ===\n{text}\n\n"
             + (f"=== ADDITIONAL SOURCE CONTEXT ===\n{context_block}\n\n" if context_block else "")
@@ -65,6 +71,7 @@ class RareDiseaseService:
             return {"symptoms_mapped": [], "diseases": []}
 
         # ── Step 3: NLM HPO lookup for each symptom (parallel) ───────────────
+        _progress("Mapping symptoms to HPO terms…", 52)
         def lookup_hpo(symptom: str) -> tuple[str, list[dict]]:
             return symptom, _nlm.text_to_hpo(symptom, max_results=2)
 
@@ -96,6 +103,7 @@ class RareDiseaseService:
             return {"symptoms_mapped": symptoms_mapped, "diseases": []}
 
         # ── Step 4: Orphadata search per HPO ID (parallel) ───────────────────
+        _progress("Searching rare disease databases…", 70)
         def orpha_search(entry: dict) -> tuple[dict, dict]:
             result = _orpha.search_by_hpo(entry["hpo_id"])
             return entry, result
@@ -104,6 +112,7 @@ class RareDiseaseService:
             orpha_results = list(ex.map(lambda e: orpha_search(e), mapped_hpos))
 
         # ── Step 5: Triangulate — rank diseases by how many HPO terms they match
+        _progress("Synthesising disease matches…", 88)
         disease_map: dict[str, dict] = defaultdict(lambda: {
             "orpha_code": "", "name": "", "matched_symptoms": [], "matched_hpos": set()
         })

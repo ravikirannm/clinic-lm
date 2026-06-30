@@ -111,11 +111,17 @@ class LiteratureReviewService:
             "summary": summary,
         }
 
-    def analyze(self, user_id: str, notebook_id: str, text: str) -> dict:
+    def analyze(self, user_id: str, notebook_id: str, text: str, on_progress=None) -> dict:
+        def _progress(step: str, pct: int):
+            if on_progress:
+                on_progress(step, pct)
+
         # ── Step 1: keyword extraction ────────────────────────────────────────
+        _progress("Extracting clinical keywords…", 10)
         keywords = _extract_keywords.get_clinical_ner_results(text) if _extract_keywords else []
 
         # ── Step 2: RAG retrieval ─────────────────────────────────────────────
+        _progress("Retrieving medical knowledge base…", 25)
         retrieved_docs: list = []
         if _rag_retriever is not None and keywords:
             try:
@@ -131,6 +137,7 @@ class LiteratureReviewService:
                 logger.warning("NotebookRAG retrieval failed: %s", e)
 
         # ── Step 3: generate PubMed search queries ────────────────────────────
+        _progress("Generating PubMed search queries…", 45)
         system_prompt = (
             "You are a medical search query specialist. "
             "Your ONLY job is to generate optimized search queries for PubMed."
@@ -178,11 +185,13 @@ class LiteratureReviewService:
         logger.info("Literature review search queries: %s", search_queries)
 
         # ── Step 4: PubMed fetch ──────────────────────────────────────────────
+        _progress("Fetching PubMed articles…", 60)
         raw_articles = _pubmed_client.fetch_pubmed(search_queries.get("pubmed", {}), 20)
         valid = [a for a in raw_articles if not a.get("error")]
         logger.info("PubMed returned %d articles", len(valid))
 
         # ── Step 5: LLM-based GRADE grading (parallel) ───────────────────────
+        _progress("Grading article evidence quality…", 78)
         articles: list[dict] = []
         if valid:
             with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
