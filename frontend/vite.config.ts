@@ -7,6 +7,10 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     allowedHosts: true,
+    headers: {
+      'ngrok-skip-browser-warning': 'any',
+      'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    },
     proxy: {
       '/api': {
         target: 'http://backend:8000',
