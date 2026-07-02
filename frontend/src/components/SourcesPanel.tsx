@@ -4,7 +4,7 @@ import type { AddSourceData, Source } from '../types.ts'
 
 interface Props {
   sources: Source[]
-  onAddSource: (data: AddSourceData) => Promise<void>
+  onAddSource: (data: AddSourceData, onProgress: (step: string, pct: number) => void) => Promise<void>
   className?: string
 }
 
@@ -44,8 +44,8 @@ export default function SourcesPanel({ sources, onAddSource, className }: Props)
       {showModal && (
         <AddSourceModal
           onClose={() => setShowModal(false)}
-          onSubmit={async data => {
-            await onAddSource(data)
+          onSubmit={async (data, onProgress) => {
+            await onAddSource(data, onProgress)
             setShowModal(false)
           }}
         />

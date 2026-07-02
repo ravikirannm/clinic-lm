@@ -3,7 +3,7 @@ import type { AddSourceData } from '../types.ts'
 
 interface Props {
   onClose: () => void
-  onSubmit: (data: AddSourceData) => Promise<void>
+  onSubmit: (data: AddSourceData, onProgress: (step: string, pct: number) => void) => Promise<void>
 }
 
 type Tab = 'file' | 'url' | 'text'
@@ -25,6 +25,8 @@ export default function AddSourceModal({ onClose, onSubmit }: Props) {
   const [fileError, setFileError] = useState('')
   const [anonymize, setAnonymize] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [progressStep, setProgressStep] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const canSubmit =
@@ -47,14 +49,20 @@ export default function AddSourceModal({ onClose, onSubmit }: Props) {
   async function handleSubmit() {
     if (!canSubmit || loading) return
     setLoading(true)
+    setProgress(0)
+    setProgressStep('')
     try {
-      if (tab === 'file') {
-        await onSubmit({ type: 'file', files, anonymize })
-      } else if (tab === 'url') {
-        await onSubmit({ type: 'url', urls: urls.trim(), anonymize })
-      } else {
-        await onSubmit({ type: 'text', text: text.trim(), anonymize })
-      }
+      const data: AddSourceData =
+        tab === 'file' ? { type: 'file', files, anonymize }
+        : tab === 'url' ? { type: 'url', urls: urls.trim(), anonymize }
+        : { type: 'text', text: text.trim(), anonymize }
+
+      await onSubmit(data, (step, pct) => {
+        setProgressStep(step)
+        setProgress(pct)
+      })
+      setProgress(100)
+      setProgressStep('Done!')
       onClose()
     } finally {
       setLoading(false)
@@ -91,7 +99,25 @@ export default function AddSourceModal({ onClose, onSubmit }: Props) {
         </div>
 
         <div className="modal-body">
-          {tab === 'file' && (
+          {loading && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '4px 0' }}>
+              <div style={{ height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: `${progress}%`,
+                  background: 'var(--accent)',
+                  borderRadius: 3,
+                  transition: 'width 0.4s ease',
+                }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-muted)' }}>
+                <span>{progressStep}</span>
+                <span>{Math.round(progress)}%</span>
+              </div>
+            </div>
+          )}
+
+          {!loading && tab === 'file' && (
             <>
               <label className="file-drop-zone">
                 <input
@@ -125,7 +151,7 @@ export default function AddSourceModal({ onClose, onSubmit }: Props) {
             </>
           )}
 
-          {tab === 'url' && (
+          {!loading && tab === 'url' && (
             <textarea
               rows={5}
               placeholder={"https://pubmed.ncbi.nlm.nih.gov/…\nhttps://example.com/guideline.html"}
@@ -136,7 +162,7 @@ export default function AddSourceModal({ onClose, onSubmit }: Props) {
             />
           )}
 
-          {tab === 'text' && (
+          {!loading && tab === 'text' && (
             <textarea
               rows={8}
               placeholder="Paste or type clinical notes, guidelines, or any text…"
@@ -165,7 +191,7 @@ export default function AddSourceModal({ onClose, onSubmit }: Props) {
                 <span>De-identify PII/PHI</span>
               </label>
           </div>
-          
+
           <button className="btn-ghost" onClick={onClose} disabled={loading}>Cancel</button>
           <button className="btn-primary" onClick={handleSubmit} disabled={!canSubmit || loading}>
             {loading ? 'Processing…' : 'Add source'}

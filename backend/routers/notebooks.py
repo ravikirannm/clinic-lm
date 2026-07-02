@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, Request, UploadFile
+from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from db.mongo import get_db
@@ -217,7 +217,6 @@ def delete_notebook(notebook_id: str, request: Request):
 async def add_sources(
     notebook_id: str,
     request: Request,
-    background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(default=[]),
     urls: Optional[str] = Form(None),
     text: Optional[str] = Form(None),
@@ -236,103 +235,130 @@ async def add_sources(
 
     should_anonymize = anonymize.lower() == "true"
 
-    def _process(content: str) -> str:
-        if not should_anonymize:
-            return content
-        from services.anonymizer import anonymize as _anonymize
-        return _anonymize(content)
+    # Read file bytes eagerly before entering the thread
+    file_data: list[tuple[str, bytes]] = []
+    for f in files:
+        if f.filename:
+            file_data.append((f.filename, await f.read()))
 
-    new_sources: list[dict] = []
+    url_list = [u.strip() for u in (urls or "").split() if u.strip()]
+    text_content = text.strip() if text and text.strip() else None
 
-    for file in files:
-        if not file.filename:
-            continue
-        file_bytes = await file.read()
-        try:
-            safe_name, file_type = validate_upload(file.filename, file_bytes)
-        except ValueError as exc:
-            return JSONResponse(status_code=400, content={"error": str(exc)})
-        content = _process(extract_file(file_bytes, file_type))
-        new_sources.append({
-            "id": str(uuid.uuid4()),
-            "type": file_type,
-            "name": safe_name,
-            "content": content,
-        })
+    n_sources = len(file_data) + len(url_list) + (1 if text_content else 0)
 
-    if urls:
-        for url in urls.split():
-            url = url.strip()
-            if not url:
-                continue
-            content = _process(extract_url(url))
+    def task(on_progress: Callable) -> dict:
+        def _process(content: str) -> str:
+            if not should_anonymize:
+                return content
+            from services.anonymizer import anonymize as _anonymize
+            return _anonymize(content)
+
+        new_sources: list[dict] = []
+        pct_per_source = 65 // max(n_sources, 1)
+        current_pct = 0
+
+        for filename, file_bytes in file_data:
+            try:
+                safe_name, file_type = validate_upload(filename, file_bytes)
+            except ValueError as exc:
+                raise exc
+            on_progress(f"Extracting text from {safe_name}…", current_pct)
+            content = extract_file(file_bytes, file_type)
+            if should_anonymize:
+                on_progress(f"Anonymizing {safe_name}…", current_pct + pct_per_source // 2)
+            content = _process(content)
+            new_sources.append({
+                "id": str(uuid.uuid4()),
+                "type": file_type,
+                "name": safe_name,
+                "content": content,
+            })
+            current_pct = min(65, current_pct + pct_per_source)
+
+        for url in url_list:
+            on_progress(f"Fetching {url}…", current_pct)
+            content = extract_url(url)
+            if should_anonymize:
+                on_progress("Anonymizing…", current_pct + pct_per_source // 2)
+            content = _process(content)
             new_sources.append({
                 "id": str(uuid.uuid4()),
                 "type": "url",
                 "name": url,
                 "content": content,
             })
+            current_pct = min(65, current_pct + pct_per_source)
 
-    if text and text.strip():
-        content = _process(text.strip())
-        name = (content[:60] + "…") if len(content) > 60 else content
-        new_sources.append({
-            "id": str(uuid.uuid4()),
-            "type": "text",
-            "name": name,
-            "content": content,
-        })
+        if text_content:
+            on_progress("Processing text…", current_pct)
+            content = _process(text_content)
+            name = (content[:60] + "…") if len(content) > 60 else content
+            new_sources.append({
+                "id": str(uuid.uuid4()),
+                "type": "text",
+                "name": name,
+                "content": content,
+            })
 
-    if not new_sources:
-        return JSONResponse(status_code=400, content={"error": "No valid sources provided"})
+        if not new_sources:
+            raise ValueError("No valid sources provided")
 
-    db = get_db()
-    existing_doc = db.notebook_content.find_one({"notebook_id": notebook_id}) or {}
-    existing_sources: list = existing_doc.get("sources", [])
-    all_sources = existing_sources + new_sources
+        db = get_db()
+        existing_doc = db.notebook_content.find_one({"notebook_id": notebook_id}) or {}
+        all_sources = existing_doc.get("sources", []) + new_sources
 
-    generated = generate_notebook_content(all_sources)
-    title = generated["title"]
-    documentation = generated["documentation"]
-    summary = generated["summary"]
+        on_progress("Generating notebook summary…", 70)
+        generated = generate_notebook_content(all_sources)
+        title = generated["title"]
+        documentation = generated["documentation"]
+        summary = generated["summary"]
 
-    now = _now()
+        on_progress("Saving…", 90)
+        now = _now()
 
-    db.notebook_content.update_one(
-        {"notebook_id": notebook_id},
-        {
-            "$set": {
+        db.notebook_content.update_one(
+            {"notebook_id": notebook_id},
+            {"$set": {
                 "sources": all_sources,
                 "documentation": documentation,
                 "summary": summary,
                 "updated_at": now,
-            }
-        },
-        upsert=True,
+            }},
+            upsert=True,
+        )
+
+        source_titles = [s["name"] for s in all_sources]
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE notebooks
+                    SET title = %s, source_titles = %s, updated_at = %s
+                    WHERE notebook_id = %s
+                    """,
+                    (title, source_titles, now, notebook_id),
+                )
+            conn.commit()
+
+        for s in new_sources:
+            threading.Thread(
+                target=NotebookRAG.index_source,
+                args=(notebook_id, s["id"], s["name"], s["content"]),
+                daemon=True,
+            ).start()
+
+        return {
+            "sources": [{"id": s["id"], "type": s["type"], "name": s["name"]} for s in new_sources],
+            "title": title,
+            "documentation": documentation,
+            "summary": summary,
+        }
+
+    return StreamingResponse(
+        _stream_tool(task),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
     )
-
-    source_titles = [s["name"] for s in all_sources]
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                UPDATE notebooks
-                SET title = %s, source_titles = %s, updated_at = %s
-                WHERE notebook_id = %s
-                """,
-                (title, source_titles, now, notebook_id),
-            )
-        conn.commit()
-
-    for s in new_sources:
-        background_tasks.add_task(NotebookRAG.index_source, notebook_id, s["id"], s["name"], s["content"])
-
-    return {
-        "sources": [{"id": s["id"], "type": s["type"], "name": s["name"]} for s in new_sources],
-        "title": title,
-        "documentation": documentation,
-        "summary": summary,
-    }
 
 
 # ── Clinical analysis ─────────────────────────────────────────────────────────

@@ -31,7 +31,7 @@ export default function NotebookPage() {
       .catch(() => {})
   }, [id])
 
-  async function handleAddSource(data: AddSourceData) {
+  async function handleAddSource(data: AddSourceData, onProgress: (step: string, pct: number) => void) {
     if (!id) return
     setAddingSource(true)
     try {
@@ -48,15 +48,44 @@ export default function NotebookPage() {
         credentials: 'include',
         body: form,
       })
-      const result = await res.json()
 
-      setNotebook(prev => prev ? {
-        ...prev,
-        title: result.title,
-        sources: [...prev.sources, ...(result.sources ?? [])],
-        documentation: result.documentation,
-        summary: result.summary,
-      } : prev)
+      if (!res.ok || !res.body) throw new Error('Server error')
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let result: Record<string, unknown> | null = null
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const chunks = buffer.split('\n\n')
+        buffer = chunks.pop() ?? ''
+        for (const chunk of chunks) {
+          const dataLine = chunk.split('\n').find(l => l.startsWith('data: '))
+          if (!dataLine) continue
+          let event: Record<string, unknown>
+          try { event = JSON.parse(dataLine.slice(6)) } catch { continue }
+          if (event.type === 'progress') {
+            onProgress(event.step as string, event.progress as number)
+          } else if (event.type === 'result') {
+            result = event.data as Record<string, unknown>
+          } else if (event.type === 'error') {
+            throw new Error(event.message as string)
+          }
+        }
+      }
+
+      if (result) {
+        setNotebook(prev => prev ? {
+          ...prev,
+          title: result!.title as string,
+          sources: [...prev.sources, ...((result!.sources ?? []) as typeof prev.sources)],
+          documentation: result!.documentation as string | null,
+          summary: result!.summary as string | null,
+        } : prev)
+      }
     } catch (err) {
       console.error(err)
     } finally {
