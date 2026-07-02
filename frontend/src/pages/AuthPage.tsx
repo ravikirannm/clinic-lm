@@ -1,17 +1,39 @@
-import { useState, type FormEvent } from 'react'
+import { useState, useEffect, type FormEvent } from 'react'
 import { useCurrentUser } from '../context/UserContext'
 
 type Step = 'email' | 'register' | 'otp'
 
+const SESSION_KEY = 'auth_state'
+
 export default function AuthPage() {
   const { refresh } = useCurrentUser()
 
-  const [step, setStep] = useState<Step>('email')
-  const [email, setEmail] = useState('')
+  const [step, setStep] = useState<Step>(() => {
+    try {
+      const saved = sessionStorage.getItem(SESSION_KEY)
+      if (saved) return (JSON.parse(saved).step as Step) ?? 'email'
+    } catch {}
+    return 'email'
+  })
+  const [email, setEmail] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem(SESSION_KEY)
+      if (saved) return JSON.parse(saved).email ?? ''
+    } catch {}
+    return ''
+  })
   const [name, setName] = useState('')
   const [otp, setOtp] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (step === 'email') {
+      sessionStorage.removeItem(SESSION_KEY)
+    } else {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ step, email }))
+    }
+  }, [step, email])
 
   async function handleEmailSubmit(e: FormEvent) {
     e.preventDefault()
@@ -73,6 +95,7 @@ export default function AuthPage() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Verification failed'); return }
+      sessionStorage.removeItem(SESSION_KEY)
       await refresh()
     } catch {
       setError('Network error. Please try again.')
@@ -154,7 +177,7 @@ export default function AuthPage() {
             <button
               type="button"
               className="btn-ghost auth-back"
-              onClick={() => { setStep('email'); setOtp(''); setError('') }}
+              onClick={() => { setEmail(''); setOtp(''); setError(''); setStep('email') }}
             >
               Use a different email
             </button>
