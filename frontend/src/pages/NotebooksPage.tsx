@@ -75,6 +75,7 @@ export default function NotebooksPage() {
         <div className="page-tabs">
           <button className="page-tab page-tab--active">Notebooks</button>
           <button className="page-tab" onClick={() => navigate('/users')}>Users</button>
+          <button className="page-tab" onClick={() => navigate('/rag-docs')}>RAG Docs</button>
         </div>
       )}
 

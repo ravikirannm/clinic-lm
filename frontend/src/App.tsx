@@ -5,6 +5,7 @@ import AuthPage from './pages/AuthPage'
 import NotebooksPage from './pages/NotebooksPage'
 import NotebookPage from './pages/NotebookPage'
 import UsersPage from './pages/UsersPage'
+import RagDocsPage from './pages/RagDocsPage'
 
 function AppRoutes() {
   const { user, loading } = useCurrentUser()
@@ -24,7 +25,10 @@ function AppRoutes() {
       <Route path="/" element={<NotebooksPage />} />
       <Route path="/notebook/:id" element={<NotebookPage />} />
       {user.role_id === 3 && (
-        <Route path="/users" element={<UsersPage />} />
+        <>
+          <Route path="/users" element={<UsersPage />} />
+          <Route path="/rag-docs" element={<RagDocsPage />} />
+        </>
       )}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

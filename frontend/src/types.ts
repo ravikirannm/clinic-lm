@@ -336,3 +336,11 @@ export interface UserRecord extends User {
   is_verified: boolean
   created_at: string | null
 }
+
+// ── RAG Knowledge Base ────────────────────────────────────────────────────────
+
+export interface RagDoc {
+  name: string
+  size: number
+  modified: number
+}

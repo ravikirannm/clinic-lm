@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from db.postgres import init_pool, init_schema
 from db.mongo import init_indexes
 from routers import notebooks, users
+from routers import rag_docs as rag_docs_router
 from routers import auth
 
 logging.basicConfig(
@@ -56,6 +57,12 @@ def _preload_models():
     except Exception as exc:
         logger.warning("NotebookRAG preload failed: %s", exc)
 
+    try:
+        from services import rag_docs
+        rag_docs.ensure_indexed()
+    except Exception as exc:
+        logger.warning("Medical RAG knowledge base preload failed: %s", exc)
+
 
 app = FastAPI(title="Clinic LM API", lifespan=lifespan)
 
@@ -89,6 +96,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(notebooks.router)
+app.include_router(rag_docs_router.router)
 
 
 @app.get("/health")

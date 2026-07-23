@@ -39,4 +39,6 @@ ICD11_CLIENT_SECRET = os.getenv("ICD11_CLIENT_SECRET", "")
 GOOGLE_EMAIL = os.getenv("GOOGLE_EMAIL", "")
 GOOGLE_PASSWORD = os.getenv("GOOGLE_PASSWORD", "")
 
+RAG_DOCS_DIR = os.getenv("RAG_DOCS_DIR", "./rag_docs")
+
 

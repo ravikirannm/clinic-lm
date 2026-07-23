@@ -98,6 +98,7 @@ export default function UsersPage() {
       <div className="page-tabs">
         <button className="page-tab" onClick={() => navigate('/')}>Notebooks</button>
         <button className="page-tab page-tab--active">Users</button>
+        <button className="page-tab" onClick={() => navigate('/rag-docs')}>RAG Docs</button>
       </div>
 
       <div className="users-table-wrap">

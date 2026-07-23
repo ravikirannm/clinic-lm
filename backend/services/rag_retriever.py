@@ -1,9 +1,23 @@
+import logging
+import threading
+
 import chromadb
 import torch
 from transformers import AutoTokenizer, AutoModel, pipeline
 
+logger = logging.getLogger(__name__)
+
+MEDCPT_DB_PATH = "./medcpt_db"
+
+
 class MedicalRAGRetriever:
-    def __init__(self, db_path="./medcpt_db"):
+    # ─── Article Encoder (indexing-side, class-level singleton) ───
+    _article_lock = threading.Lock()
+    _article_tokenizer = None
+    _article_model = None
+    _article_device: str = "cpu"
+
+    def __init__(self, db_path=MEDCPT_DB_PATH):
         import logging
         from config import TORCH_DEVICE
         self._logger = logging.getLogger(__name__)
@@ -19,7 +33,49 @@ class MedicalRAGRetriever:
         self._logger.info("MedicalRAGRetriever: using device=%s", self._device)
         # ─── Load existing ChromaDB ───────────────────────────
         self.chroma = chromadb.PersistentClient(path=db_path)
-        self.collection = self.chroma.get_or_create_collection("medical_docs")
+        self.collection = self.chroma.get_or_create_collection(
+            "medical_docs", metadata={"hnsw:space": "cosine"}
+        )
+
+    @classmethod
+    def _ensure_article_encoder(cls):
+        """Load the Article Encoder (indexing side of MedCPT), once, lazily."""
+        if cls._article_model is not None:
+            return
+        with cls._article_lock:
+            if cls._article_model is not None:
+                return
+            from config import TORCH_DEVICE
+            logger.info("MedicalRAGRetriever: loading MedCPT-Article-Encoder…")
+            cls._article_device = TORCH_DEVICE
+            cls._article_tokenizer = AutoTokenizer.from_pretrained(
+                "ncbi/MedCPT-Article-Encoder"
+            )
+            cls._article_model = AutoModel.from_pretrained(
+                "ncbi/MedCPT-Article-Encoder"
+            ).to(cls._article_device)
+            cls._article_model.eval()
+            logger.info("MedicalRAGRetriever: Article-Encoder using device=%s", cls._article_device)
+
+    @classmethod
+    def embed_article(cls, text: str) -> list[float]:
+        """Embed a document/chunk for indexing, using the Article Encoder."""
+        cls._ensure_article_encoder()
+        inputs = cls._article_tokenizer(
+            [text],
+            padding=True,
+            truncation=True,
+            return_tensors="pt",
+            max_length=512,
+        ).to(cls._article_device)
+
+        with torch.no_grad(), torch.amp.autocast(
+            cls._article_device, enabled=cls._article_device == "cuda"
+        ):
+            outputs = cls._article_model(**inputs)
+            embedding = outputs.last_hidden_state[:, 0, :]
+
+        return embedding.cpu().float().numpy().tolist()[0]
 
 
 
