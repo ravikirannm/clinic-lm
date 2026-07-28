@@ -2,6 +2,7 @@
 
 An AI-powered clinical notebook platform that helps clinicians organise patient documentation and run a suite of structured clinical analyses — differential diagnosis, drug interaction checking, ICD-11 mapping, literature review, risk scoring, rare disease matching, contradiction detection, guidelines conformance, and document drafting — all powered by a locally-running LLM (Ollama).
 
+![Application Screenshot](image.png)
 ---
 
 ## Table of Contents
