@@ -1,6 +1,9 @@
 import ReactMarkdown from 'react-markdown'
 import ConfidenceBar from './ConfidenceBar.tsx'
-import type { ClinicalAnalysis, PossibleCondition, RedFlag, RecommendedTest } from '../types.ts'
+import type {
+  ClinicalAnalysis, PossibleCondition, RedFlag, RecommendedTest,
+  ComputedPosterior, PosteriorChainStep, PosteriorDiffEntry, FalsifierCandidate,
+} from '../types.ts'
 
 interface Props {
   analysis: ClinicalAnalysis
@@ -9,6 +12,10 @@ interface Props {
 
 export default function ClinicalAnalysisModal({ analysis, onClose }: Props) {
   const { query_response, symptom_analysis, confidence } = analysis
+  const hasSourcedEvidence =
+    (analysis.computed_posteriors?.length ?? 0) > 0 ||
+    (analysis.conditions_without_sourced_prior?.length ?? 0) > 0 ||
+    (analysis.computed_next_best_falsifiers?.length ?? 0) > 0
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -117,8 +124,99 @@ export default function ClinicalAnalysisModal({ analysis, onClose }: Props) {
             </Section>
           )}
 
+          {hasSourcedEvidence && (
+            <Section title="Sourced Evidence (Live, Experimental)">
+              <p style={{ ...mutedText, marginBottom: 10 }}>
+                Computed from likelihood ratios and prevalence figures extracted live from the PubMed/RAG
+                evidence retrieved above — never a fixed table. Shown alongside the summary above for
+                comparison; it is not yet the source of truth, and is often incomplete when retrieval
+                didn't surface a citable number for a condition.
+              </p>
+
+              {analysis.computed_posteriors?.map((c: ComputedPosterior, i: number) => (
+                <PosteriorCard key={i} chain={c} diffEntry={analysis.posterior_diff?.find(d => d.condition === c.condition)} />
+              ))}
+
+              {(analysis.conditions_without_sourced_prior?.length ?? 0) > 0 && (
+                <div style={{ ...cardStyle, borderLeft: '3px solid #94a3b8' }}>
+                  <p style={mutedText}>
+                    <span style={{ fontWeight: 500 }}>No sourced prevalence found for: </span>
+                    {analysis.conditions_without_sourced_prior!.join(', ')} — retrieval didn't surface an
+                    explicit, citable number for these, so no posterior was computed for them.
+                  </p>
+                </div>
+              )}
+
+              {(analysis.computed_next_best_falsifiers?.length ?? 0) > 0 && (
+                <FalsifierList falsifiers={analysis.computed_next_best_falsifiers!} />
+              )}
+            </Section>
+          )}
+
         </div>
       </div>
+    </div>
+  )
+}
+
+function PosteriorCard({ chain, diffEntry }: { chain: ComputedPosterior; diffEntry?: PosteriorDiffEntry }) {
+  return (
+    <div style={cardStyle}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+        <strong style={{ fontSize: 14 }}>{chain.condition}</strong>
+        <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>{(chain.posterior * 100).toFixed(1)}%</span>
+          {diffEntry && (
+            <span style={likelihoodBadge(diffEntry.computed_bucket)}>{diffEntry.computed_bucket.replace('_', ' ')}</span>
+          )}
+        </span>
+      </div>
+      {diffEntry && diffEntry.llm_bucket && (
+        <p style={{ ...mutedText, marginBottom: 6 }}>
+          <span style={{ fontWeight: 500 }}>vs. summary above: </span>
+          {diffEntry.llm_bucket.replace('_', ' ')}{' '}
+          {diffEntry.agree
+            ? '(computed and summary agree)'
+            : '(computed differs from summary — worth a second look, not necessarily an error in either)'}
+        </p>
+      )}
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace', lineHeight: 1.6, marginBottom: 6 }}>
+        {chain.rendered_chain}
+      </p>
+      <details>
+        <summary style={{ fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>
+          {chain.steps.length} step{chain.steps.length === 1 ? '' : 's'} in this chain
+        </summary>
+        <div style={{ marginTop: 6 }}>
+          {chain.steps.map((s: PosteriorChainStep, i: number) => (
+            <p key={i} style={{ ...mutedText, fontSize: 12, marginTop: 4 }}>
+              {s.kind === 'prior' && (
+                <>Prior {(s.running_probability * 100).toFixed(1)}% — {s.stratum} ({s.grade}, {s.source_id})</>
+              )}
+              {s.kind === 'update' && (
+                <>{s.finding} {s.status}, LR {s.lr?.toFixed(2)} ({s.grade}, {s.source_id}) → {(s.running_probability * 100).toFixed(1)}%</>
+              )}
+              {s.kind === 'gap' && <span style={{ color: '#94a3b8' }}>gap: {s.note}</span>}
+            </p>
+          ))}
+        </div>
+      </details>
+    </div>
+  )
+}
+
+function FalsifierList({ falsifiers }: { falsifiers: FalsifierCandidate[] }) {
+  const scored = falsifiers.filter(f => f.expected_information_gain != null).slice(0, 5)
+  if (scored.length === 0) return null
+  return (
+    <div style={{ ...cardStyle, borderLeft: '3px solid #6366f1' }}>
+      <p style={{ fontWeight: 500, fontSize: 13, marginBottom: 6 }}>Computed information-gain ranking</p>
+      {scored.map((f, i) => (
+        <p key={i} style={{ ...mutedText, marginTop: 2 }}>
+          {f.finding} — gain {f.expected_information_gain?.toFixed(3)}
+          <span style={{ fontSize: 11 }}> (evidence for: {f.conditions_with_evidence.join(', ')})</span>
+        </p>
+      ))}
     </div>
   )
 }

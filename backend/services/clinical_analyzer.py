@@ -7,7 +7,13 @@ import ollama
 from config import OLLAMA_BASE_URL, OLLAMA_MODEL
 from services.data_model import PubMedSearchRequest, ClinicalAssessment
 from services.extract_keywords import ExtractKeywords
+from services.finding_extraction import FindingExtractor, _PROMPT_VERSION_HASH as _FINDINGS_PROMPT_HASH
 from services.notebook_rag import NotebookRAG
+from services.bayesian import compute_posterior, confidence_from_separation, rank_falsifiers, render_chain
+from services.evidence_extraction import EvidenceExtractor
+from services.finding_vocabulary import FindingVocabularyProposer
+from services.posterior_diff import build_diff
+from services.pipeline_trace import make_stage_record, trace_to_dicts, content_hash
 from external.pubmed import PubMedClient
 
 logger = logging.getLogger(__name__)
@@ -33,6 +39,9 @@ _pubmed_client = PubMedClient()
 class ClinicalAnalyzer:
     def __init__(self):
         self.client = ollama.Client(host=OLLAMA_BASE_URL)
+        self.finding_extractor = FindingExtractor()
+        self.evidence_extractor = EvidenceExtractor()
+        self.finding_vocabulary_proposer = FindingVocabularyProposer()
 
     def analyze(self, user_id: str, notebook_id: str, text: str, on_progress=None) -> dict:
         def _progress(step: str, pct: int):
@@ -110,18 +119,35 @@ class ClinicalAnalyzer:
             )
             return PubMedSearchRequest.model_validate_json(resp["message"]["content"])
 
-        with ThreadPoolExecutor(max_workers=3) as pool:
+        def _propose_finding_vocabulary():
+            try:
+                return self.finding_vocabulary_proposer.propose(text)
+            except Exception as e:
+                logger.warning("Finding vocabulary proposal failed: %s", e)
+                return []
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
             fut_medical = pool.submit(_fetch_medical_rag)
             fut_notebook = pool.submit(_fetch_notebook_rag)
             fut_queries = pool.submit(_generate_pubmed_queries)
+            fut_vocab = pool.submit(_propose_finding_vocabulary)
 
             retrieved_docs = fut_medical.result()
             notebook_chunks = fut_notebook.result()
             medical_corpus_input = fut_queries.result()
+            finding_vocabulary = fut_vocab.result()
 
         step_query_conf = max(0.0, min(1.0, medical_corpus_input.confidence))
         api_inputs = medical_corpus_input.model_dump()
         logger.info("Generated search queries: %s", api_inputs)
+
+        # Finding extraction runs against the vocabulary just proposed above, so it
+        # can't be parallelized with that proposal — see services/finding_vocabulary.py.
+        try:
+            structured_findings = self.finding_extractor.extract(text, finding_vocabulary)
+        except Exception as e:
+            logger.warning("Structured finding extraction failed: %s", e)
+            structured_findings = []
 
         # ── Step 4: PubMed fetch ──────────────────────────────────────────────
         _progress("Fetching PubMed evidence…", 45)
@@ -212,12 +238,87 @@ next_best_discriminator must reference the actual top differentials you identifi
 
         total_confidence = round(step_query_conf * step_assessment_conf, 3)
 
+        # ── Deterministic Bayesian layer (steps 2-3, 5, 7 of the migration plan) ──
+        # Runs alongside the LLM megaprompt above, NOT in place of it. No prior or LR
+        # value here is a source-code literal: they are extracted from the PubMed
+        # articles and RAG chunks already retrieved above (retrieved_docs,
+        # pubmed_results), each traced to a real id and a verbatim quote from that
+        # exact document — see services/evidence_extraction.py. A condition the
+        # extractor finds no sourced prevalence for gets no computed posterior at all,
+        # rather than a placeholder number. See docs/clinical_analyzer_refactor.md §9
+        # step 4 for why this stays advisory (parallel-diff) rather than replacing
+        # symptom_analysis outright.
+        _progress("Extracting sourced evidence…", 72)
+        candidate_conditions = [c["name"] for c in symptom_analysis.get("possible_conditions", [])]
+        extracted_priors, extracted_lr_entries = self.evidence_extractor.extract(
+            candidate_conditions, finding_vocabulary, pubmed_results, retrieved_docs,
+        )
+        lr_table = {(e.finding, e.condition): e for e in extracted_lr_entries}
+
+        _progress("Computing deterministic posteriors…", 78)
+        posterior_chains = [
+            compute_posterior(prior, structured_findings, lr_table)
+            for prior in extracted_priors
+        ]
+        conditions_without_sourced_prior = [
+            c for c in candidate_conditions if c not in {p.condition for p in extracted_priors}
+        ]
+        reported_findings = {f.name for f in structured_findings if f.status != "not_reported"}
+        candidate_findings = [f for f in finding_vocabulary if f not in reported_findings]
+        ranked_falsifiers = rank_falsifiers(candidate_findings, posterior_chains, lr_table)
+        computed_confidence = confidence_from_separation(posterior_chains)
+        posterior_diff = build_diff(posterior_chains, symptom_analysis)
+
+        pipeline_trace = trace_to_dicts([
+            make_stage_record("propose_finding_vocabulary", "llm_snapshot",
+                               {"model": OLLAMA_MODEL}, finding_vocabulary),
+            make_stage_record("extract_findings", "llm_snapshot",
+                               {"model": OLLAMA_MODEL, "prompt_hash": _FINDINGS_PROMPT_HASH},
+                               [f.model_dump() for f in structured_findings]),
+            make_stage_record("extract_evidence", "llm_snapshot_with_citation_verification",
+                               {"model": OLLAMA_MODEL,
+                                "kb_version": extracted_priors[0].kb_version if extracted_priors
+                                              else (extracted_lr_entries[0].kb_version if extracted_lr_entries else "no_evidence_extracted")},
+                               {"priors": [p.__dict__ for p in extracted_priors],
+                                "lr_entries": [e.__dict__ for e in extracted_lr_entries]}),
+            make_stage_record("compute_posteriors", "deterministic", {},
+                               [{"condition": c.condition, "posterior": c.posterior} for c in posterior_chains]),
+            make_stage_record("rank_falsifiers", "deterministic", {},
+                               [{"finding": f.finding, "gain": f.expected_information_gain} for f in ranked_falsifiers]),
+            make_stage_record("assessment_megaprompt", "llm_snapshot",
+                               {"model": OLLAMA_MODEL, "prompt_hash": content_hash(system_prompt_pass_3)},
+                               symptom_analysis),
+        ])
+
         response_data = {
             "keywords": keywords,
             "generated_queries": api_inputs,
             "pubmed_results": pubmed_results,
             "symptom_analysis": symptom_analysis,
             "confidence": total_confidence,
+            # Snapshotted output of the new deterministic-pipeline stage 1 (structured
+            # Finding[] extraction, controlled vocabulary).
+            "findings": [f.model_dump() for f in structured_findings],
+            # Deterministic layer — advisory/shadow mode, not yet the posterior source
+            # of record. See docs/clinical_analyzer_refactor.md §9 migration step 3-4.
+            "computed_posteriors": [
+                {
+                    "condition": c.condition,
+                    "posterior": c.posterior,
+                    "kb_version": c.kb_version,
+                    "steps": [step.__dict__ for step in c.steps],
+                    "rendered_chain": render_chain(c),
+                }
+                for c in posterior_chains
+            ],
+            "computed_next_best_falsifiers": [f.__dict__ for f in ranked_falsifiers],
+            "computed_confidence": computed_confidence,
+            "posterior_diff": posterior_diff,
+            # Conditions the LLM proposed but for which no retrieved document contained
+            # an explicit, citable prevalence statement — no posterior was computed for
+            # these, on purpose, rather than guessing a prior.
+            "conditions_without_sourced_prior": conditions_without_sourced_prior,
+            "pipeline_trace": pipeline_trace,
         }
 
         # ── Step 6: human-readable summary ───────────────────────────────────
@@ -245,5 +346,10 @@ Please generate a concise but thorough explanation of the clinical findings.
             options={"temperature": 0.4},
         )
         response_data["query_response"] = response["message"]["content"]
+        response_data["pipeline_trace"].append(
+            trace_to_dicts([make_stage_record("render_summary", "llm_snapshot",
+                                                {"model": OLLAMA_MODEL},
+                                                response_data["query_response"])])[0]
+        )
 
         return response_data

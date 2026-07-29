@@ -65,6 +65,57 @@ export interface PubMedResult {
   abstract: string
 }
 
+export interface StructuredFinding {
+  name: string
+  status: 'present' | 'absent' | 'not_reported'
+  grade: string | null
+  source_span: string
+  extractor_version: string
+}
+
+export interface PosteriorChainStep {
+  kind: 'prior' | 'update' | 'gap'
+  running_probability: number
+  finding: string | null
+  status: string | null
+  lr: number | null
+  source_id: string | null
+  grade: string | null
+  stratum: string | null // populated on the "prior" step only
+  note: string | null
+}
+
+export interface ComputedPosterior {
+  condition: string
+  posterior: number
+  kb_version: string
+  steps: PosteriorChainStep[]
+  rendered_chain: string
+}
+
+export interface FalsifierCandidate {
+  finding: string
+  expected_information_gain: number | null
+  conditions_with_evidence: string[]
+}
+
+export interface PosteriorDiffEntry {
+  condition: string
+  computed_posterior: number
+  computed_bucket: 'high' | 'medium' | 'low' | 'very_low'
+  llm_bucket: string | null
+  agree: boolean | null
+  note?: string
+}
+
+export interface PipelineStageRecord {
+  stage: string
+  kind: 'llm_snapshot' | 'deterministic' | 'llm_snapshot_with_citation_verification'
+  versions: Record<string, string>
+  output_hash: string
+  computed_at: string
+}
+
 export interface ClinicalAnalysis {
   keywords: string[]
   pubmed_results: PubMedResult[]
@@ -76,6 +127,19 @@ export interface ClinicalAnalysis {
   }
   query_response: string
   confidence: number
+  // Deterministic pipeline — advisory/shadow mode, diffed against the LLM differential
+  // above but not yet the source of truth. Every prior/LR here is extracted live from
+  // pubmed_results / the RAG retrieval for this request (services/evidence_extraction.py),
+  // never a hardcoded value — so computed_posteriors is often empty or partial; that's
+  // the correct behavior when retrieval didn't surface a citable number, not a bug.
+  // See docs/clinical_analyzer_refactor.md §9.
+  findings?: StructuredFinding[]
+  computed_posteriors?: ComputedPosterior[]
+  computed_next_best_falsifiers?: FalsifierCandidate[]
+  computed_confidence?: number
+  posterior_diff?: PosteriorDiffEntry[]
+  conditions_without_sourced_prior?: string[]
+  pipeline_trace?: PipelineStageRecord[]
 }
 
 export interface AddSourceData {

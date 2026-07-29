@@ -78,6 +78,71 @@ class RecommendedTest(BaseModel):
     priority: Literal["stat", "urgent", "routine"]
 
 
+class FindingVocabularyProposal(BaseModel):
+    """LLM output: canonical finding ids relevant to THIS patient's presentation,
+    proposed fresh per request — not a fixed domain list. See services/finding_vocabulary.py."""
+    finding_ids: List[str] = []
+    confidence: float = _CONF_FIELD
+
+
+class Finding(BaseModel):
+    """A single discrete observation extracted from free text. The LLM maps text to a
+    Finding.name drawn from a controlled vocabulary and does not assign probabilities —
+    see services/finding_vocabulary.py and docs/clinical_analyzer_refactor.md §4.2."""
+    name: str = Field(description="Canonical finding id from the supplied controlled vocabulary — never freeform")
+    status: Literal["present", "absent", "not_reported"]
+    grade: str | None = Field(default=None, description="Optional severity/graded value, e.g. 'mild', '7/10'")
+    source_span: str = Field(description="Verbatim text this finding was extracted from")
+    extractor_version: str = Field(default="", description="Filled in by the caller after parsing, not by the model")
+
+
+class FindingExtractionResult(BaseModel):
+    """LLM output wrapper for the finding-extraction stage."""
+    findings: List[Finding] = []
+    confidence: float = _CONF_FIELD
+
+
+_EVIDENCE_GRADE = Literal[
+    "systematic_review", "rct", "cohort_study", "case_control",
+    "case_report", "expert_consensus", "patient_reported"
+]
+
+
+class ExtractedPrior(BaseModel):
+    """LLM output: a baseline prevalence claim found VERBATIM in a retrieved source
+    document — never the model's own unsourced estimate. See services/evidence_extraction.py."""
+    condition: str = Field(description="Must exactly match one of the candidate condition names provided")
+    probability: float = Field(ge=0.0, le=1.0)
+    stratum: str = Field(min_length=1, description="The population/stratum the source describes, "
+                                                     "e.g. 'ED patients with chest pain' — required, not optional")
+    source_id: str = Field(description="The exact id shown in the SOURCE DOCUMENTS list — never invented")
+    quote: str = Field(description="Verbatim sentence from that source containing the number")
+    grade: _EVIDENCE_GRADE = Field(description="What kind of study this source is — classify honestly from its "
+                                                "title/abstract, do not default to the same grade for every source")
+
+
+class ExtractedLR(BaseModel):
+    """LLM output: a likelihood ratio claim found VERBATIM in a retrieved source document."""
+    finding: str = Field(description="Must exactly match one of the controlled vocabulary finding ids provided")
+    condition: str = Field(description="Must exactly match one of the candidate condition names provided")
+    lr_present: float | None = Field(default=None, description="LR+ if stated; omit if not found")
+    lr_absent: float | None = Field(default=None, description="LR- if stated; omit if not found")
+    source_id: str = Field(description="The exact id shown in the SOURCE DOCUMENTS list — never invented")
+    quote: str = Field(description="Verbatim sentence from that source containing the number(s)")
+    grade: _EVIDENCE_GRADE = Field(description="What kind of study this source is — classify honestly from its "
+                                                "title/abstract, do not default to the same grade for every source")
+
+
+class EvidenceExtractionResult(BaseModel):
+    """LLM output wrapper for the evidence-extraction stage. Empty lists are the
+    expected/correct output when the retrieved documents contain no explicit
+    prevalence or likelihood-ratio statement — the model must not fill gaps with
+    outside knowledge."""
+    priors: List[ExtractedPrior] = []
+    lr_entries: List[ExtractedLR] = []
+    confidence: float = _CONF_FIELD
+
+
 class ClinicalAssessment(BaseModel):
     possible_conditions: List[DifferentialCondition]
     next_best_discriminator: str = Field(
